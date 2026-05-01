@@ -21,6 +21,7 @@ If you ever need to apply by hand:
 cd ~/coding/pagani/custom_rom/evolutionx
 git -C hardware/qcom-caf/common apply device/oneplus/pagani/patches/0001-xbl_config_arb_check-tolerate-unsupported-header.patch
 git -C hardware/oplus apply device/oneplus/pagani/patches/0002-vintf-bump-subsys_radio-to-1-9.patch
+git -C kernel/oneplus/sm8750-modules apply device/oneplus/pagani/patches/0003-oplus_chg_gki-populate-power-now-and-current-now.patch
 ```
 
 ## Patch index
@@ -29,6 +30,7 @@ git -C hardware/oplus apply device/oneplus/pagani/patches/0002-vintf-bump-subsys
 |---|------|------|-----|
 | 0001 | `hardware/qcom-caf/common/xbl_config_arb_check/main.cpp` | Treat unparseable XBL anti-rollback header as `OK` instead of fatal | Pagani XBL header layout differs; without this the boot-time ARB check fails install |
 | 0002 | `hardware/oplus/vintf/device_framework_matrix.xml` | Bump `vendor.oplus.hardware.subsys_interface.subsys_radio` from `1-8` to `1-9` | OEM ships radio HAL v9 on pagani; matrix needs to allow it |
+| 0003 | `kernel/oneplus/sm8750-modules/oplus/kernel/charger/v2/oplus_chg_gki.c` | Populate `POWER_SUPPLY_PROP_POWER_NOW` and `POWER_SUPPLY_PROP_CURRENT_NOW` from CPA topic instead of hardcoded 0 / broken gauge value | OPLUS hardcodes `POWER_NOW=0`, and SUPERVOOC/PPS charge pumps bypass the gauge so `CURRENT_NOW` reads near-zero during fast charge — making AOSP AOD/lockscreen/BatteryStats show "0.0W, 0mA" when actually charging at 33-80W. Patch derives both from the kernel's own `oplus_cpa_get_actual_used_power()` |
 | ~~0006~~ | ~~UprobeStats~~ | (removed — patch caused apex containment fail; root cause is EvoX bp4a's `RELEASE_PLATFORM_SDK_FINAL` not flipping `Platform_sdk_final=true`, which would map `current`→36 in the codenames map and have bionic generate the `version:36` crt variant. EvoX upstream fix needed; not pagani's problem to solve) |
 
 ## Known incomplete (see `.todo-incomplete-diffs.txt`)

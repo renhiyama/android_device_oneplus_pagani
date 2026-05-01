@@ -1,0 +1,71 @@
+diff --git a/oplus/kernel/charger/v2/oplus_chg_gki.c b/oplus/kernel/charger/v2/oplus_chg_gki.c
+index c02ff88..10aa35b 100644
+--- a/oplus/kernel/charger/v2/oplus_chg_gki.c
++++ b/oplus/kernel/charger/v2/oplus_chg_gki.c
+@@ -28,6 +28,7 @@
+ #include <oplus_chg_state_retention.h>
+ #include <oplus_chg_pps.h>
+ #include <oplus_msg_filter.h>
++#include <oplus_chg_cpa.h>
+ 
+ struct oplus_gki_device {
+ 	struct device *dev;
+@@ -752,16 +753,31 @@ static int battery_psy_get_prop(struct power_supply *psy,
+ 		pval->intval = data.intval * 1000;
+ #endif
+ 		break;
+-	case POWER_SUPPLY_PROP_CURRENT_NOW:
+-		if (is_support_parallel_battery(chip->gauge_topic) &&
+-		    is_main_gauge_topic_available(chip))
+-			rc = oplus_mms_get_item_data(chip->main_gauge_topic, GAUGE_ITEM_CURR,
+-						     &data, (chip->wired_online || chip->wls_online));
+-		else
+-			rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_CURR,
+-						     &data, (chip->wired_online || chip->wls_online));
+-		pval->intval = data.intval;
++	case POWER_SUPPLY_PROP_CURRENT_NOW: {
++		struct oplus_mms *cpa_topic = oplus_mms_get_by_name("cpa");
++		int power_mw = cpa_topic && (chip->wired_online || chip->wls_online)
++			? oplus_cpa_get_actual_used_power(cpa_topic) : 0;
++
++		/* SUPERVOOC/PPS charge pumps bypass the gauge, so the gauge
++		 * reports near-zero current during fast charge. Derive the real
++		 * battery-side current from cpa power and battery voltage when
++		 * the wired/wls path is active. Fall back to the gauge value
++		 * for discharge or no-charger states. */
++		if (power_mw > 0 && chip->vbat_mv > 0) {
++			/* I (µA) = P (W) / V (V) * 1e6 = (P_mW * 1e6) / V_mV */
++			pval->intval = ((s64)power_mw * 1000000) / chip->vbat_mv;
++		} else {
++			if (is_support_parallel_battery(chip->gauge_topic) &&
++			    is_main_gauge_topic_available(chip))
++				rc = oplus_mms_get_item_data(chip->main_gauge_topic, GAUGE_ITEM_CURR,
++							     &data, (chip->wired_online || chip->wls_online));
++			else
++				rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_CURR,
++							     &data, (chip->wired_online || chip->wls_online));
++			pval->intval = data.intval;
++		}
+ 		break;
++	}
+ 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+ 		pval->intval = 6500000;
+ 		break;
+@@ -822,9 +838,15 @@ static int battery_psy_get_prop(struct power_supply *psy,
+ 		pval->intval = 3600;
+ 		break;
+ 	case POWER_SUPPLY_PROP_POWER_NOW:
+-	case POWER_SUPPLY_PROP_POWER_AVG:
+-		pval->intval = 0;
++	case POWER_SUPPLY_PROP_POWER_AVG: {
++		struct oplus_mms *cpa_topic = oplus_mms_get_by_name("cpa");
++		int power_mw = 0;
++		if (cpa_topic && (chip->wired_online || chip->wls_online))
++			power_mw = oplus_cpa_get_actual_used_power(cpa_topic);
++		/* AOSP power_supply expects µW; oplus_cpa returns mW */
++		pval->intval = power_mw * 1000;
+ 		break;
++	}
+ 	case POWER_SUPPLY_PROP_CHARGE_NOW:
+ 		if (chip->wired_online && chip->vooc_started == true &&
+ 				chip->wired_type == OPLUS_CHG_USB_TYPE_SVOOC)

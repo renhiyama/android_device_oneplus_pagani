@@ -15,6 +15,7 @@ PAGANI_PATCH_MARKER="${PAGANI_DEVICE_DIR}/.patches-applied"
 PAGANI_PATCH_MAP=(
     "0001-xbl_config_arb_check-tolerate-unsupported-header.patch:hardware/qcom-caf/common"
     "0002-vintf-bump-subsys_radio-to-1-9.patch:hardware/oplus"
+    "0003-oplus_chg_gki-populate-power-now-and-current-now.patch:kernel/oneplus/sm8750-modules"
 )
 
 if [ ! -f "${PAGANI_PATCH_MARKER}" ] || [ "${PAGANI_PATCHES_DIR}" -nt "${PAGANI_PATCH_MARKER}" ]; then
