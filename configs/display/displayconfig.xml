@@ -22,31 +22,29 @@
         <sdrHdrRatioMap>
             <point>
                 <sdrNits>2.000</sdrNits>
-                <hdrRatio>4.000</hdrRatio>
+                <hdrRatio>8.000</hdrRatio>
             </point>
             <point>
                 <sdrNits>100.000</sdrNits>
-                <hdrRatio>2.500</hdrRatio>
+                <hdrRatio>6.000</hdrRatio>
             </point>
             <point>
                 <sdrNits>300.000</sdrNits>
-                <hdrRatio>1.800</hdrRatio>
+                <hdrRatio>4.000</hdrRatio>
             </point>
             <point>
                 <sdrNits>600.000</sdrNits>
-                <hdrRatio>1.333</hdrRatio>
+                <hdrRatio>2.666</hdrRatio>
             </point>
             <point>
-                <sdrNits>782.000</sdrNits>
-                <hdrRatio>1.050</hdrRatio>
+                <sdrNits>1000.000</sdrNits>
+                <hdrRatio>1.600</hdrRatio>
             </point>
         </sdrHdrRatioMap>
     </highBrightnessMode>
 
-    <screenBrightnessRampFastDecrease>0.10</screenBrightnessRampFastDecrease>
-    <screenBrightnessRampFastIncrease>0.10</screenBrightnessRampFastIncrease>
+    <!--<screenBrightnessRampFastDecrease>0.25</screenBrightnessRampFastDecrease>
+    <screenBrightnessRampFastIncrease>0.25</screenBrightnessRampFastIncrease>
     <screenBrightnessRampSlowDecrease>0.05</screenBrightnessRampSlowDecrease>
-    <screenBrightnessRampSlowIncrease>0.05</screenBrightnessRampSlowIncrease>
-    <screenBrightnessRampIncreaseMaxMillis>2000</screenBrightnessRampIncreaseMaxMillis>
-    <screenBrightnessRampDecreaseMaxMillis>3000</screenBrightnessRampDecreaseMaxMillis>
+    <screenBrightnessRampSlowIncrease>0.05</screenBrightnessRampSlowIncrease>-->
 </displayConfiguration>

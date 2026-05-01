@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <!-- Default screen brightness on first boot, ~50%.
+         Integer value (0-255) for legacy Android brightness API. -->
+    <integer name="config_screenBrightnessSettingDefault">128</integer>
+
+    <!-- Float value (0.0-1.0) for Android 13+ brightness API. -->
+    <item name="config_screenBrightnessSettingDefaultFloat" format="float" type="dimen">0.5</item>
+
+    <!-- Enable 6 GHz softap (Wi-Fi hotspot). India recently allowed consumer
+         use of 6 GHz unlicensed band. Default LineageOS config disables it
+         unless the regulatory db says it's allowed in the device's country. -->
+    <bool name="config_wifiSoftap6ghzSupported">true</bool>
+    <bool name="config_wifi6ghzSupport">true</bool>
+</resources>

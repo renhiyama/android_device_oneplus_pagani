@@ -168,10 +168,10 @@
     <ctl name="TX_DEC6 Volume" value="84" />
     <ctl name="TX_DEC7 Volume" value="84" />
 
-    <ctl name="ADC1 Volume" value="10" />
-    <ctl name="ADC2 Volume" value="10" />
-    <ctl name="ADC3 Volume" value="10" />
-    <ctl name="ADC4 Volume" value="10" />
+    <ctl name="ADC1 Volume" value="30" />
+    <ctl name="ADC2 Volume" value="30" />
+    <ctl name="ADC3 Volume" value="30" />
+    <ctl name="ADC4 Volume" value="30" />
 
     <ctl name="VA_DEC0 Volume" value="84" />
     <ctl name="VA_DEC1 Volume" value="84" />

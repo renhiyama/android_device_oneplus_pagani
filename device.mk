@@ -28,6 +28,7 @@ $(call soong_config_set_bool,qtidisplay,oplus_udfps,true)
 
 # LiveDisplay
 $(call soong_config_set_bool,OPLUS_LINEAGE_LIVEDISPLAY_HAL,ENABLE_AF,true)
+$(call soong_config_set_bool,OPLUS_LINEAGE_LIVEDISPLAY_HAL,ENABLE_DM,true)
 
 # Overlays
 DEVICE_PACKAGE_OVERLAYS += \
@@ -80,3 +81,8 @@ $(call inherit-product, device/oneplus/sm8750-common/common.mk)
 
 # Inherit from the proprietary files makefile.
 $(call inherit-product, vendor/oneplus/pagani/pagani-vendor.mk)
+
+# OEM Camera (OplusCamera) — dodge-camera-port pipeline, with their apktool
+# typeface patch applied to our pagani extraction (removes OplusBase-
+# Configuration smali ref so verifier doesn't reject the dex at load time).
+$(call inherit-product-if-exists, vendor/oplus/camera/opluscamera.mk)
