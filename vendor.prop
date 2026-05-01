@@ -4,7 +4,9 @@ bluetooth.device.default_name=OnePlus 13s
 # USB
 vendor.usb.product_string=OnePlus 13s
 
-# Graphics
+# Graphics (idle/touch timers come from sm8750-common to avoid duplicates)
 ro.surface_flinger.set_display_power_timer_ms=1000
-ro.surface_flinger.set_idle_timer_ms=1000
-ro.surface_flinger.set_touch_timer_ms=1000
+
+# Camera aux/privapp allowlists are owned by vendor/oplus/camera/opluscamera.mk
+# (vendor.camera.aux.packagelist, persist.vendor.camera.privapp.list) — both set
+# to "*" there to let any 3rd-party camera app see all back/front cameras.
