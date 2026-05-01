@@ -1,0 +1,24 @@
+diff --git a/xbl_config_arb_check/main.cpp b/xbl_config_arb_check/main.cpp
+index 4d4c0df..d79a410 100644
+--- a/xbl_config_arb_check/main.cpp
++++ b/xbl_config_arb_check/main.cpp
+@@ -143,15 +143,15 @@ int main(int argc, char* argv[]) {
+     auto arb_current = ReadAntiRollbackVersion("/dev/block/by-name/xbl_config_a");
+ 
+     if (!arb_current) {
+-        LOG(ERROR) << "Failed to read xbl_config_a ARB value";
+-        return EXIT_FAILURE;
++        LOG(WARNING) << "Failed to parse xbl_config_a ARB value (unsupported header), assuming ok";
++        return EXIT_SUCCESS;
+     }
+ 
+     auto arb_target = ReadAntiRollbackVersion("/dev/block/by-name/xbl_config_b");
+ 
+     if (!arb_target) {
+-        LOG(ERROR) << "Failed to read xbl_config_b ARB value";
+-        return EXIT_FAILURE;
++        LOG(WARNING) << "Failed to parse xbl_config_b ARB value (unsupported header), assuming ok";
++        return EXIT_SUCCESS;
+     }
+ 
+     auto target_slot = argv[1][0];

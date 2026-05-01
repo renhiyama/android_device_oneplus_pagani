@@ -1,0 +1,13 @@
+diff --git a/vintf/device_framework_matrix.xml b/vintf/device_framework_matrix.xml
+index 3fe8ae1..18e0a00 100644
+--- a/vintf/device_framework_matrix.xml
++++ b/vintf/device_framework_matrix.xml
+@@ -304,7 +304,7 @@
+     </hal>
+     <hal format="aidl" optional="true">
+         <name>vendor.oplus.hardware.subsys_interface.subsys_radio</name>
+-        <version>1-8</version>
++        <version>1-9</version>
+         <interface>
+             <name>ISubsysRadio</name>
+             <instance>slot1</instance>

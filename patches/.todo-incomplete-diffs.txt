@@ -1,0 +1,7 @@
+Audio HAL configs and sepolicy_vndr/domain.te diffs unavailable
+Reason: 'fatal: unable to read <oid>' from git diff
+Likely cause: shallow clone or missing pack files
+Files modified (need to capture snapshots if user wants to preserve):
+ - hardware/qcom-caf/sm8450-6.6/audio/primary-hal/hal/core/configs
+ - hardware/qcom-caf/sm8750/audio/primary-hal/hal/core/configs
+ - device/qcom/sepolicy_vndr/sm8750/generic/vendor/common/domain.te
