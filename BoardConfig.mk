@@ -32,3 +32,9 @@ TARGET_RECOVERY_UI_MARGIN_HEIGHT := 103
 
 # Include the proprietary files BoardConfig.
 include vendor/oneplus/pagani/BoardConfigVendor.mk
+
+# Allow vendor property_contexts to label ro.oplus.camera.* (which OplusCamera
+# reads at runtime). Vendor partition's strict prefix policy normally blocks
+# anything outside ro.vendor./vendor./persist.vendor./etc. Dodge sm8750-common
+# tree relies on this escape hatch.
+BUILD_BROKEN_VENDOR_PROPERTY_NAMESPACE := true
