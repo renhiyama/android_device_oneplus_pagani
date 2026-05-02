@@ -1,283 +1,288 @@
-diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
-index 91a5bdf..9c800ec 100644
---- a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
-+++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
-@@ -65,6 +65,8 @@ public class ChargingControlController extends LineageHealthFeature {
-             LineageSettings.System.CHARGING_CONTROL_START_TIME);
-     private final Uri TARGET_TIME_URI = LineageSettings.System.getUriFor(
-             LineageSettings.System.CHARGING_CONTROL_TARGET_TIME);
-+    private final Uri BYPASS_URI = LineageSettings.System.getUriFor(
-+            LineageSettings.System.BYPASS_CHARGING_ENABLED);
- 
-     // Internal state
-     private float mBatteryPct;
-@@ -235,6 +237,53 @@ public class ChargingControlController extends LineageHealthFeature {
-                 && setStartTime(mDefaultStartTime) && setTargetTime(mDefaultTargetTime);
-     }
- 
-+    /**
-+     * Manual bypass-charging override. Independent of CHARGING_CONTROL_ENABLED:
-+     * when this is true, the controller forces the HAL into bypass regardless of
-+     * the regular Auto/Limit/Manual provider logic.
-+     */
-+    public boolean isBypassChargingEnabled() {
-+        return LineageSettings.System.getInt(mContentResolver,
-+                LineageSettings.System.BYPASS_CHARGING_ENABLED, 0) != 0;
-+    }
-+
-+    public boolean setBypassChargingEnabled(boolean enabled) {
-+        putBoolean(LineageSettings.System.BYPASS_CHARGING_ENABLED, enabled);
-+        return true;
-+    }
-+
-+    /**
-+     * Whether the underlying HAL supports bypass mode (battery FET open while
-+     * USB powers the system). Used by the UI to show/hide the manual toggle.
-+     */
-+    public boolean isBypassChargingSupported() {
-+        return isChargingModeSupported(
-+                vendor.lineage.health.ChargingControlSupportedMode.BYPASS);
-+    }
-+
-+    private boolean writeBypassToHal(boolean bypassActive) {
-+        if (mChargingControl == null) {
-+            return false;
-+        }
-+        try {
-+            // bypassActive == true → tell HAL "charging disabled" (writes the
-+            // bypass-on payload to PLC). bypassActive == false → "charging
-+            // enabled" (releases the FET, normal charging resumes).
-+            mChargingControl.setChargingEnabled(!bypassActive);
-+            return true;
-+        } catch (RemoteException | RuntimeException e) {
-+            // RuntimeException catches UnsupportedOperationException (returned
-+            // by AIDL when the HAL replies EX_UNSUPPORTED_OPERATION — happens
-+            // if the PLC kernel module isn't loaded yet at boot phase 1000,
-+            // which is timing-sensitive especially with KernelSU patches that
-+            // shift module load order). Letting it propagate would crash
-+            // system_server and bootloop the device. We just log & soldier on;
-+            // the next setting change or power event will retry.
-+            Log.e(TAG, "Failed to write bypass state to HAL (HAL not ready?)", e);
-+            return false;
-+        }
-+    }
-+
-     private void updateBatteryInfo(Intent intent) {
-         int battStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-         int battPlugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
-@@ -279,11 +328,15 @@ public class ChargingControlController extends LineageHealthFeature {
-         }
- 
-         // Register setting observer
--        registerSettings(MODE_URI, LIMIT_URI, ENABLED_URI, START_TIME_URI, TARGET_TIME_URI);
-+        registerSettings(MODE_URI, LIMIT_URI, ENABLED_URI, START_TIME_URI, TARGET_TIME_URI,
-+                BYPASS_URI);
- 
-         handleSettingChange();
-     }
- 
-+    /** Track last bypass state so we know when to release the FET. */
-+    private boolean mLastBypassWritten = false;
-+
-     public boolean isChargingModeSupported(int mode) {
-         try {
-             return isSupported() && (mChargingControl.getSupportedMode() & mode) != 0;
-@@ -346,13 +399,18 @@ public class ChargingControlController extends LineageHealthFeature {
-             mBattReceiver = null;
-         }
- 
-+        // PLC state is naturally cleared when power is gone, so on next
-+        // power-connect we want updateChargeControl to write fresh state.
-+        mLastBypassWritten = false;
-+
-         // On disconnected, reset internal state
-         resetInternalState();
-     }
- 
-     private void onPowerStatus(boolean enable) {
--        // Don't do anything if it is not enabled
--        if (!isEnabled()) {
-+        // Bypass needs to react to power events too even if regular Charging
-+        // Control is off, so don't short-circuit when only bypass is on.
-+        if (!isEnabled() && !isBypassChargingEnabled()) {
-             return;
-         }
- 
-@@ -423,6 +481,24 @@ public class ChargingControlController extends LineageHealthFeature {
-             return;
-         }
- 
-+        // Manual bypass override wins over everything. The user explicitly
-+        // asked to bypass, so skip the provider state machine entirely.
-+        final boolean wantBypass = isBypassChargingEnabled() && mIsPowerConnected;
-+        if (wantBypass) {
-+            mCurrentProvider.disable();
-+            mChargingNotification.cancel();
-+            writeBypassToHal(true);
-+            mLastBypassWritten = true;
-+            return;
-+        }
-+        // Bypass was previously active and just got turned off — release the
-+        // battery FET explicitly so charging can resume. (If Charging Control
-+        // is also enabled, its provider will immediately re-evaluate below.)
-+        if (mLastBypassWritten) {
-+            writeBypassToHal(false);
-+            mLastBypassWritten = false;
-+        }
-+
-         if (!isEnabled() || mIsControlCancelledOnce || !mIsPowerConnected) {
-             mCurrentProvider.disable();
-             mChargingNotification.cancel();
-@@ -492,8 +568,12 @@ public class ChargingControlController extends LineageHealthFeature {
-     private void handleSettingChange() {
-         int mode = getMode();
- 
--        if (mIsEnabled != isEnabled()) {
--            mIsEnabled = isEnabled();
-+        // Keep monitoring battery while EITHER Charging Control or manual bypass is on.
-+        // Bypass needs power-connect events to write the PLC state and disconnect events
-+        // to clear it.
-+        final boolean shouldMonitor = isEnabled() || isBypassChargingEnabled();
-+        if (mIsEnabled != shouldMonitor) {
-+            mIsEnabled = shouldMonitor;
- 
-             if (mIsEnabled) {
-                 if (mBattReceiver == null) {
-@@ -503,13 +583,13 @@ public class ChargingControlController extends LineageHealthFeature {
-                 }
-                 IntentFilter battFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-                 mContext.registerReceiver(mBattReceiver, battFilter);
--                Log.i(TAG, "Enabled charging control, start monitoring battery");
-+                Log.i(TAG, "Enabled charging-state monitoring");
-             } else {
-                 if (mBattReceiver != null) {
-                     mContext.unregisterReceiver(mBattReceiver);
-                     mBattReceiver = null;
-                 }
--                Log.i(TAG, "Disabled charging control, stop monitoring battery");
-+                Log.i(TAG, "Stopped charging-state monitoring");
-             }
-         }
- 
-diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..ca01322 100644
---- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-+++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-@@ -161,6 +161,21 @@ public class HealthInterfaceService extends LineageSystemService {
-                     || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
-         }
- 
-+        @Override
-+        public boolean isBypassChargingSupported() {
-+            return mCCC != null && mCCC.isBypassChargingSupported();
-+        }
-+
-+        @Override
-+        public boolean getBypassChargingEnabled() {
-+            return mCCC != null && mCCC.isBypassChargingEnabled();
-+        }
-+
-+        @Override
-+        public boolean setBypassChargingEnabled(boolean enabled) {
-+            return mCCC != null && mCCC.setBypassChargingEnabled(enabled);
-+        }
-+
-         @Override
-         public boolean isFastChargeSupported() {
-             return mFCC.isSupported();
-diff --git a/sdk/src/java/lineageos/health/HealthInterface.java b/sdk/src/java/lineageos/health/HealthInterface.java
-index 40f438a..798008e 100644
---- a/sdk/src/java/lineageos/health/HealthInterface.java
-+++ b/sdk/src/java/lineageos/health/HealthInterface.java
-@@ -284,6 +284,42 @@ public class HealthInterface {
-         }
-     }
- 
-+    /**
-+     * Returns whether bypass charging (battery FET held open while USB powers
-+     * the system) is supported by the underlying HAL.
-+     */
-+    public boolean isBypassChargingSupported() {
-+        try {
-+            return checkService() && sService.isBypassChargingSupported();
-+        } catch (RemoteException e) {
-+            return false;
-+        }
-+    }
-+
-+    /**
-+     * Returns the manual bypass-charging override state. Independent of
-+     * {@link #getEnabled()} — when true, the device forces bypass regardless of
-+     * the regular Charging Control logic.
-+     */
-+    public boolean getBypassChargingEnabled() {
-+        try {
-+            return checkService() && sService.getBypassChargingEnabled();
-+        } catch (RemoteException e) {
-+            return false;
-+        }
-+    }
-+
-+    /**
-+     * Toggle the manual bypass-charging override.
-+     */
-+    public boolean setBypassChargingEnabled(boolean enabled) {
-+        try {
-+            return checkService() && sService.setBypassChargingEnabled(enabled);
-+        } catch (RemoteException e) {
-+            return false;
-+        }
-+    }
-+
-     /**
-      * Returns whether fast charge is supported
-      *
-diff --git a/sdk/src/java/lineageos/health/IHealthInterface.aidl b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-index 633f104..841aa79 100644
---- a/sdk/src/java/lineageos/health/IHealthInterface.aidl
-+++ b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-@@ -31,4 +31,11 @@ interface IHealthInterface {
-     int[] getSupportedFastChargeModes();
-     int getFastChargeMode();
-     boolean setFastChargeMode(int mode);
-+
-+    // Manual bypass-charging override. Appended at the end on purpose — AIDL
-+    // transaction codes are positional, so adding new methods anywhere except
-+    // the tail breaks ABI for already-built clients.
-+    boolean isBypassChargingSupported();
-+    boolean getBypassChargingEnabled();
-+    boolean setBypassChargingEnabled(boolean enabled);
- }
-diff --git a/sdk/src/java/lineageos/providers/LineageSettings.java b/sdk/src/java/lineageos/providers/LineageSettings.java
-index 118251b..f5a4148 100644
---- a/sdk/src/java/lineageos/providers/LineageSettings.java
-+++ b/sdk/src/java/lineageos/providers/LineageSettings.java
-@@ -1432,6 +1432,20 @@ public final class LineageSettings {
-         public static final Validator CHARGING_CONTROL_LIMIT_VALIDATOR =
-                 new InclusiveIntegerRangeValidator(70, 100);
- 
-+        /**
-+         * Manual bypass-charging override. When 1, the device runs from external
-+         * power while the battery FET is held open (no charge / no discharge).
-+         * Independent of CHARGING_CONTROL_ENABLED — when set, takes priority over
-+         * the auto Toggle/Limit logic, so flipping this on overrides whatever the
-+         * Charging Control framework would otherwise do.
-+         * The value is boolean (1 or 0).
-+         */
-+        public static final String BYPASS_CHARGING_ENABLED = "bypass_charging_enabled";
-+
-+        /** @hide */
-+        public static final Validator BYPASS_CHARGING_ENABLED_VALIDATOR =
-+                sBooleanValidator;
-+
-         /**
-          * Fast charging mode
-          */
-@@ -2212,6 +2226,7 @@ public final class LineageSettings {
-             VALIDATORS.put(CHARGING_CONTROL_START_TIME, CHARGING_CONTROL_START_TIME_VALIDATOR);
-             VALIDATORS.put(CHARGING_CONTROL_TARGET_TIME, CHARGING_CONTROL_TARGET_TIME_VALIDATOR);
-             VALIDATORS.put(CHARGING_CONTROL_LIMIT, CHARGING_CONTROL_LIMIT_VALIDATOR);
-+            VALIDATORS.put(BYPASS_CHARGING_ENABLED, BYPASS_CHARGING_ENABLED_VALIDATOR);
-             VALIDATORS.put(FAST_CHARGE_MODE, FAST_CHARGE_MODE_VALIDATOR);
-             VALIDATORS.put(BATTERY_LIGHT_ENABLED, BATTERY_LIGHT_ENABLED_VALIDATOR);
-             VALIDATORS.put(BATTERY_LIGHT_FULL_CHARGE_DISABLED,
+diff --git a/patches/0006-lineage-sdk-bypass-charging-setting-and-controller.patch b/patches/0006-lineage-sdk-bypass-charging-setting-and-controller.patch
+index 26670fc..e69de29 100644
+--- a/patches/0006-lineage-sdk-bypass-charging-setting-and-controller.patch
++++ b/patches/0006-lineage-sdk-bypass-charging-setting-and-controller.patch
+@@ -1,283 +0,0 @@
+-diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
+-index 91a5bdf..9c800ec 100644
+---- a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
+-+++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
+-@@ -65,6 +65,8 @@ public class ChargingControlController extends LineageHealthFeature {
+-             LineageSettings.System.CHARGING_CONTROL_START_TIME);
+-     private final Uri TARGET_TIME_URI = LineageSettings.System.getUriFor(
+-             LineageSettings.System.CHARGING_CONTROL_TARGET_TIME);
+-+    private final Uri BYPASS_URI = LineageSettings.System.getUriFor(
+-+            LineageSettings.System.BYPASS_CHARGING_ENABLED);
+- 
+-     // Internal state
+-     private float mBatteryPct;
+-@@ -235,6 +237,53 @@ public class ChargingControlController extends LineageHealthFeature {
+-                 && setStartTime(mDefaultStartTime) && setTargetTime(mDefaultTargetTime);
+-     }
+- 
+-+    /**
+-+     * Manual bypass-charging override. Independent of CHARGING_CONTROL_ENABLED:
+-+     * when this is true, the controller forces the HAL into bypass regardless of
+-+     * the regular Auto/Limit/Manual provider logic.
+-+     */
+-+    public boolean isBypassChargingEnabled() {
+-+        return LineageSettings.System.getInt(mContentResolver,
+-+                LineageSettings.System.BYPASS_CHARGING_ENABLED, 0) != 0;
+-+    }
+-+
+-+    public boolean setBypassChargingEnabled(boolean enabled) {
+-+        putBoolean(LineageSettings.System.BYPASS_CHARGING_ENABLED, enabled);
+-+        return true;
+-+    }
+-+
+-+    /**
+-+     * Whether the underlying HAL supports bypass mode (battery FET open while
+-+     * USB powers the system). Used by the UI to show/hide the manual toggle.
+-+     */
+-+    public boolean isBypassChargingSupported() {
+-+        return isChargingModeSupported(
+-+                vendor.lineage.health.ChargingControlSupportedMode.BYPASS);
+-+    }
+-+
+-+    private boolean writeBypassToHal(boolean bypassActive) {
+-+        if (mChargingControl == null) {
+-+            return false;
+-+        }
+-+        try {
+-+            // bypassActive == true → tell HAL "charging disabled" (writes the
+-+            // bypass-on payload to PLC). bypassActive == false → "charging
+-+            // enabled" (releases the FET, normal charging resumes).
+-+            mChargingControl.setChargingEnabled(!bypassActive);
+-+            return true;
+-+        } catch (RemoteException | RuntimeException e) {
+-+            // RuntimeException catches UnsupportedOperationException (returned
+-+            // by AIDL when the HAL replies EX_UNSUPPORTED_OPERATION — happens
+-+            // if the PLC kernel module isn't loaded yet at boot phase 1000,
+-+            // which is timing-sensitive especially with KernelSU patches that
+-+            // shift module load order). Letting it propagate would crash
+-+            // system_server and bootloop the device. We just log & soldier on;
+-+            // the next setting change or power event will retry.
+-+            Log.e(TAG, "Failed to write bypass state to HAL (HAL not ready?)", e);
+-+            return false;
+-+        }
+-+    }
+-+
+-     private void updateBatteryInfo(Intent intent) {
+-         int battStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+-         int battPlugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
+-@@ -279,11 +328,15 @@ public class ChargingControlController extends LineageHealthFeature {
+-         }
+- 
+-         // Register setting observer
+--        registerSettings(MODE_URI, LIMIT_URI, ENABLED_URI, START_TIME_URI, TARGET_TIME_URI);
+-+        registerSettings(MODE_URI, LIMIT_URI, ENABLED_URI, START_TIME_URI, TARGET_TIME_URI,
+-+                BYPASS_URI);
+- 
+-         handleSettingChange();
+-     }
+- 
+-+    /** Track last bypass state so we know when to release the FET. */
+-+    private boolean mLastBypassWritten = false;
+-+
+-     public boolean isChargingModeSupported(int mode) {
+-         try {
+-             return isSupported() && (mChargingControl.getSupportedMode() & mode) != 0;
+-@@ -346,13 +399,18 @@ public class ChargingControlController extends LineageHealthFeature {
+-             mBattReceiver = null;
+-         }
+- 
+-+        // PLC state is naturally cleared when power is gone, so on next
+-+        // power-connect we want updateChargeControl to write fresh state.
+-+        mLastBypassWritten = false;
+-+
+-         // On disconnected, reset internal state
+-         resetInternalState();
+-     }
+- 
+-     private void onPowerStatus(boolean enable) {
+--        // Don't do anything if it is not enabled
+--        if (!isEnabled()) {
+-+        // Bypass needs to react to power events too even if regular Charging
+-+        // Control is off, so don't short-circuit when only bypass is on.
+-+        if (!isEnabled() && !isBypassChargingEnabled()) {
+-             return;
+-         }
+- 
+-@@ -423,6 +481,24 @@ public class ChargingControlController extends LineageHealthFeature {
+-             return;
+-         }
+- 
+-+        // Manual bypass override wins over everything. The user explicitly
+-+        // asked to bypass, so skip the provider state machine entirely.
+-+        final boolean wantBypass = isBypassChargingEnabled() && mIsPowerConnected;
+-+        if (wantBypass) {
+-+            mCurrentProvider.disable();
+-+            mChargingNotification.cancel();
+-+            writeBypassToHal(true);
+-+            mLastBypassWritten = true;
+-+            return;
+-+        }
+-+        // Bypass was previously active and just got turned off — release the
+-+        // battery FET explicitly so charging can resume. (If Charging Control
+-+        // is also enabled, its provider will immediately re-evaluate below.)
+-+        if (mLastBypassWritten) {
+-+            writeBypassToHal(false);
+-+            mLastBypassWritten = false;
+-+        }
+-+
+-         if (!isEnabled() || mIsControlCancelledOnce || !mIsPowerConnected) {
+-             mCurrentProvider.disable();
+-             mChargingNotification.cancel();
+-@@ -492,8 +568,12 @@ public class ChargingControlController extends LineageHealthFeature {
+-     private void handleSettingChange() {
+-         int mode = getMode();
+- 
+--        if (mIsEnabled != isEnabled()) {
+--            mIsEnabled = isEnabled();
+-+        // Keep monitoring battery while EITHER Charging Control or manual bypass is on.
+-+        // Bypass needs power-connect events to write the PLC state and disconnect events
+-+        // to clear it.
+-+        final boolean shouldMonitor = isEnabled() || isBypassChargingEnabled();
+-+        if (mIsEnabled != shouldMonitor) {
+-+            mIsEnabled = shouldMonitor;
+- 
+-             if (mIsEnabled) {
+-                 if (mBattReceiver == null) {
+-@@ -503,13 +583,13 @@ public class ChargingControlController extends LineageHealthFeature {
+-                 }
+-                 IntentFilter battFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+-                 mContext.registerReceiver(mBattReceiver, battFilter);
+--                Log.i(TAG, "Enabled charging control, start monitoring battery");
+-+                Log.i(TAG, "Enabled charging-state monitoring");
+-             } else {
+-                 if (mBattReceiver != null) {
+-                     mContext.unregisterReceiver(mBattReceiver);
+-                     mBattReceiver = null;
+-                 }
+--                Log.i(TAG, "Disabled charging control, stop monitoring battery");
+-+                Log.i(TAG, "Stopped charging-state monitoring");
+-             }
+-         }
+- 
+-diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
+-index 0431c3e..ca01322 100644
+---- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
+-+++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
+-@@ -161,6 +161,21 @@ public class HealthInterfaceService extends LineageSystemService {
+-                     || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
+-         }
+- 
+-+        @Override
+-+        public boolean isBypassChargingSupported() {
+-+            return mCCC != null && mCCC.isBypassChargingSupported();
+-+        }
+-+
+-+        @Override
+-+        public boolean getBypassChargingEnabled() {
+-+            return mCCC != null && mCCC.isBypassChargingEnabled();
+-+        }
+-+
+-+        @Override
+-+        public boolean setBypassChargingEnabled(boolean enabled) {
+-+            return mCCC != null && mCCC.setBypassChargingEnabled(enabled);
+-+        }
+-+
+-         @Override
+-         public boolean isFastChargeSupported() {
+-             return mFCC.isSupported();
+-diff --git a/sdk/src/java/lineageos/health/HealthInterface.java b/sdk/src/java/lineageos/health/HealthInterface.java
+-index 40f438a..798008e 100644
+---- a/sdk/src/java/lineageos/health/HealthInterface.java
+-+++ b/sdk/src/java/lineageos/health/HealthInterface.java
+-@@ -284,6 +284,42 @@ public class HealthInterface {
+-         }
+-     }
+- 
+-+    /**
+-+     * Returns whether bypass charging (battery FET held open while USB powers
+-+     * the system) is supported by the underlying HAL.
+-+     */
+-+    public boolean isBypassChargingSupported() {
+-+        try {
+-+            return checkService() && sService.isBypassChargingSupported();
+-+        } catch (RemoteException e) {
+-+            return false;
+-+        }
+-+    }
+-+
+-+    /**
+-+     * Returns the manual bypass-charging override state. Independent of
+-+     * {@link #getEnabled()} — when true, the device forces bypass regardless of
+-+     * the regular Charging Control logic.
+-+     */
+-+    public boolean getBypassChargingEnabled() {
+-+        try {
+-+            return checkService() && sService.getBypassChargingEnabled();
+-+        } catch (RemoteException e) {
+-+            return false;
+-+        }
+-+    }
+-+
+-+    /**
+-+     * Toggle the manual bypass-charging override.
+-+     */
+-+    public boolean setBypassChargingEnabled(boolean enabled) {
+-+        try {
+-+            return checkService() && sService.setBypassChargingEnabled(enabled);
+-+        } catch (RemoteException e) {
+-+            return false;
+-+        }
+-+    }
+-+
+-     /**
+-      * Returns whether fast charge is supported
+-      *
+-diff --git a/sdk/src/java/lineageos/health/IHealthInterface.aidl b/sdk/src/java/lineageos/health/IHealthInterface.aidl
+-index 633f104..841aa79 100644
+---- a/sdk/src/java/lineageos/health/IHealthInterface.aidl
+-+++ b/sdk/src/java/lineageos/health/IHealthInterface.aidl
+-@@ -31,4 +31,11 @@ interface IHealthInterface {
+-     int[] getSupportedFastChargeModes();
+-     int getFastChargeMode();
+-     boolean setFastChargeMode(int mode);
+-+
+-+    // Manual bypass-charging override. Appended at the end on purpose — AIDL
+-+    // transaction codes are positional, so adding new methods anywhere except
+-+    // the tail breaks ABI for already-built clients.
+-+    boolean isBypassChargingSupported();
+-+    boolean getBypassChargingEnabled();
+-+    boolean setBypassChargingEnabled(boolean enabled);
+- }
+-diff --git a/sdk/src/java/lineageos/providers/LineageSettings.java b/sdk/src/java/lineageos/providers/LineageSettings.java
+-index 118251b..f5a4148 100644
+---- a/sdk/src/java/lineageos/providers/LineageSettings.java
+-+++ b/sdk/src/java/lineageos/providers/LineageSettings.java
+-@@ -1432,6 +1432,20 @@ public final class LineageSettings {
+-         public static final Validator CHARGING_CONTROL_LIMIT_VALIDATOR =
+-                 new InclusiveIntegerRangeValidator(70, 100);
+- 
+-+        /**
+-+         * Manual bypass-charging override. When 1, the device runs from external
+-+         * power while the battery FET is held open (no charge / no discharge).
+-+         * Independent of CHARGING_CONTROL_ENABLED — when set, takes priority over
+-+         * the auto Toggle/Limit logic, so flipping this on overrides whatever the
+-+         * Charging Control framework would otherwise do.
+-+         * The value is boolean (1 or 0).
+-+         */
+-+        public static final String BYPASS_CHARGING_ENABLED = "bypass_charging_enabled";
+-+
+-+        /** @hide */
+-+        public static final Validator BYPASS_CHARGING_ENABLED_VALIDATOR =
+-+                sBooleanValidator;
+-+
+-         /**
+-          * Fast charging mode
+-          */
+-@@ -2212,6 +2226,7 @@ public final class LineageSettings {
+-             VALIDATORS.put(CHARGING_CONTROL_START_TIME, CHARGING_CONTROL_START_TIME_VALIDATOR);
+-             VALIDATORS.put(CHARGING_CONTROL_TARGET_TIME, CHARGING_CONTROL_TARGET_TIME_VALIDATOR);
+-             VALIDATORS.put(CHARGING_CONTROL_LIMIT, CHARGING_CONTROL_LIMIT_VALIDATOR);
+-+            VALIDATORS.put(BYPASS_CHARGING_ENABLED, BYPASS_CHARGING_ENABLED_VALIDATOR);
+-             VALIDATORS.put(FAST_CHARGE_MODE, FAST_CHARGE_MODE_VALIDATOR);
+-             VALIDATORS.put(BATTERY_LIGHT_ENABLED, BATTERY_LIGHT_ENABLED_VALIDATOR);
+-             VALIDATORS.put(BATTERY_LIGHT_FULL_CHARGE_DISABLED,
