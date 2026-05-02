@@ -324,6 +324,117 @@ index 0431c3e..e9ea94d 100644
          @Override
          public boolean isFastChargeSupported() {
              return mFCC.isSupported();
+diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java
+index 1486467..70bc2ff 100644
+--- a/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java
++++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java
+@@ -6,7 +6,12 @@
+ package org.lineageos.platform.internal.health;
+ 
+ import android.content.Context;
++import android.os.IBinder;
++import android.os.Parcel;
++import android.os.RemoteException;
++import android.os.ServiceManager;
+ import android.text.format.DateFormat;
++import android.util.Log;
+ 
+ import java.text.SimpleDateFormat;
+ import java.time.LocalDate;
+@@ -55,6 +60,52 @@ public class Util {
+      * @param time seconds of the day
+      * @return UTC milliseconds from epoch
+      */
++    /**
++     * Engage real OPLUS bypass via the V10 vendor charger AIDL.
++     * setChgConfig(flag=25, "1+switch=1"|"1+switch=0", caller=2) — same call OOS
++     * Battery.apk's BypassChargeController makes. Hand-rolled Parcel to avoid
++     * pulling in the OEM-versioned (127-method) Java AIDL stub.
++     *
++     * Direct sysfs writes (PLC, mmi_charging_enable, chg_path) all fail to
++     * actually open the battery FET — only this binder path does, because the
++     * V10 service coordinates the charge-pump + FET + USB negotiation atomically.
++     *
++     * Returns true if the AIDL call returned 0 (success); false on any error
++     * (HAL not present, transact failed, exception). Always safe to call —
++     * silently no-ops on devices without the OPLUS HAL.
++     */
++    public static boolean callOplusBypassAidl(boolean enable) {
++        IBinder binder = ServiceManager.getService(
++                "vendor.oplus.hardware.charger.ICharger/default");
++        if (binder == null) {
++            Log.w("LineageHealth", "OPLUS charger HAL not available");
++            return false;
++        }
++        Parcel data = Parcel.obtain();
++        Parcel reply = Parcel.obtain();
++        try {
++            data.writeInterfaceToken("vendor.oplus.hardware.charger.ICharger");
++            data.writeInt(25);                                   // ChgFuncFlag = bypass
++            data.writeString(enable ? "1+switch=1" : "1+switch=0");
++            data.writeInt(2);                                    // caller = matches OOS
++            if (!binder.transact(127, data, reply, 0)) {        // TRANSACTION_setChgConfig
++                Log.e("LineageHealth", "OPLUS setChgConfig transact returned false");
++                return false;
++            }
++            reply.readException();
++            int result = reply.readInt();
++            Log.i("LineageHealth", "OPLUS setChgConfig(25, " + (enable ? "ON" : "OFF")
++                    + ", 2) = " + result);
++            return result == 0;
++        } catch (RemoteException | RuntimeException e) {
++            Log.e("LineageHealth", "OPLUS setChgConfig failed", e);
++            return false;
++        } finally {
++            reply.recycle();
++            data.recycle();
++        }
++    }
++
+     static public long getTimeMillisFromSecondOfDay(int time) {
+         ZoneId utcZone = ZoneOffset.UTC;
+         LocalDate currentDate = LocalDate.now();
+diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java
+index a66e77c..f1ccf84 100644
+--- a/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java
++++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java
+@@ -21,6 +21,7 @@ import android.os.BatteryUsageStats;
+ import android.util.Log;
+ 
+ import org.lineageos.platform.internal.R;
++import org.lineageos.platform.internal.health.Util;
+ 
+ import vendor.lineage.health.ChargingControlSupportedMode;
+ import vendor.lineage.health.IChargingControl;
+@@ -197,17 +198,25 @@ public class Toggle extends ChargingControlProvider {
+     }
+ 
+     private boolean setChargingEnabled(boolean enabled) {
++        // Engage real bypass via OPLUS vendor charger HAL. The Lineage HAL
++        // only writes to /sys/class/oplus_chg/common/plc which the kernel
++        // accepts but doesn't act on (verified empirically). Calling the
++        // OPLUS AIDL is the only path that actually opens the battery FET.
++        // setChargingEnabled(false) → bypass ON; (true) → bypass OFF.
++        boolean ok = Util.callOplusBypassAidl(!enabled);
++
+         try {
+             if (mToggleSetAlways) {
+                 mChargingControl.setChargingEnabled(enabled);
+             } else if (mChargingControl.getChargingEnabled() != enabled) {
+                 mChargingControl.setChargingEnabled(enabled);
+             }
+-            return true;
+         } catch (Exception e) {
+-            Log.e(TAG, "Failed to set charging enabled", e);
+-            return false;
++            Log.w(TAG, "Lineage HAL setChargingEnabled threw, ignoring: "
++                    + e.getMessage());
+         }
++
++        return ok;
+     }
+ 
+     @Override
 diff --git a/sdk/src/java/lineageos/health/HealthInterface.java b/sdk/src/java/lineageos/health/HealthInterface.java
 index 40f438a..1113277 100644
 --- a/sdk/src/java/lineageos/health/HealthInterface.java
