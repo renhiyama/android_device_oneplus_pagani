@@ -175,10 +175,10 @@ index 91a5bdf..70ca949 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..552eaa3 100644
+index 0431c3e..6913809 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-@@ -161,6 +161,40 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -161,6 +161,106 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -194,25 +194,91 @@ index 0431c3e..552eaa3 100644
 +
 +        @Override
 +        public boolean setBypassChargingEnabled(boolean enabled) {
-+            return mCCC != null && mCCC.setBypassChargingEnabled(enabled);
++            // Persist user intent so it survives reboot + so other components
++            // (AOD label, QS tile) can poll the desired state.
++            if (mCCC != null) {
++                mCCC.setBypassChargingEnabled(enabled);
++            }
++            // Engage real bypass via the OPLUS vendor charger HAL. Direct sysfs
++            // writes (PLC, mmi_charging_enable, chg_path) all fail to actually
++            // open the battery FET — only this binder path does, because the
++            // V10 service coordinates the charge-pump + FET + USB negotiation
++            // atomically. Reverse-engineered from /odm/bin/hw/vendor.oplus.
++            // hardware.charger-V10-service + Battery.apk's BypassChargeController:
++            // setChgConfig(flag=25, "1+switch=1"|"1+switch=0", caller=2).
++            return callOplusSetChgConfig(25,
++                    enabled ? "1+switch=1" : "1+switch=0", 2);
 +        }
 +
 +        @Override
 +        public boolean isBypassChargingActive() {
-+            // Read kernel ground truth from sysfs. system_server runs in the
-+            // system_server selinux domain which has read on
-+            // vendor_sysfs_usb_supply via device-tree sepolicy.
-+            // status=3 → PLC ENABLE (bypass active). status=2 → NOT_ALLOW.
-+            java.io.File node = new java.io.File("/sys/class/oplus_chg/common/plc");
-+            if (!node.exists()) {
-+                return false;
-+            }
-+            try (java.io.BufferedReader r =
-+                         new java.io.BufferedReader(new java.io.FileReader(node))) {
-+                String line = r.readLine();
-+                return line != null && line.trim().equals("status=3");
++            // Ground truth: USB plugged AND battery not actually charging.
++            // PLC `status` is unreliable (always reads 3 once charger plugged);
++            // battery/current_now is heavily cached. battery/status is the
++            // simplest signal that flips reliably when the FET opens.
++            try {
++                java.io.File usbOnline =
++                        new java.io.File("/sys/class/power_supply/usb/online");
++                java.io.File batStatus =
++                        new java.io.File("/sys/class/power_supply/battery/status");
++                if (!usbOnline.exists() || !batStatus.exists()) {
++                    return false;
++                }
++                try (java.io.BufferedReader r = new java.io.BufferedReader(
++                        new java.io.FileReader(usbOnline))) {
++                    String s = r.readLine();
++                    if (s == null || !"1".equals(s.trim())) return false;
++                }
++                try (java.io.BufferedReader r = new java.io.BufferedReader(
++                        new java.io.FileReader(batStatus))) {
++                    String s = r.readLine();
++                    if (s == null) return false;
++                    String t = s.trim();
++                    // Charger present but kernel says we're not pulling current
++                    // → FET is open → bypass is engaged.
++                    return "Not charging".equals(t) || "Discharging".equals(t);
++                }
 +            } catch (java.io.IOException e) {
 +                return false;
++            }
++        }
++
++        /**
++         * Raw-Parcel binder call into vendor.oplus.hardware.charger.ICharger.
++         * We avoid pulling in the Java AIDL stub (127 methods, OEM-versioned)
++         * by hand-rolling the Parcel for setChgConfig (transaction code 127).
++         */
++        private boolean callOplusSetChgConfig(int flag, String extra, int caller) {
++            android.os.IBinder binder = android.os.ServiceManager.getService(
++                    "vendor.oplus.hardware.charger.ICharger/default");
++            if (binder == null) {
++                Log.w(TAG, "OPLUS charger HAL not available");
++                return false;
++            }
++            android.os.Parcel data = android.os.Parcel.obtain();
++            android.os.Parcel reply = android.os.Parcel.obtain();
++            try {
++                data.writeInterfaceToken(
++                        "vendor.oplus.hardware.charger.ICharger");
++                data.writeInt(flag);
++                data.writeString(extra);
++                data.writeInt(caller);
++                // 127 = TRANSACTION_setChgConfig in the V10 ICharger AIDL.
++                if (!binder.transact(127, data, reply, 0)) {
++                    Log.e(TAG, "setChgConfig transact returned false");
++                    return false;
++                }
++                reply.readException();
++                int result = reply.readInt();
++                Log.i(TAG, "OPLUS setChgConfig(" + flag + ", " + extra
++                        + ", " + caller + ") = " + result);
++                return result == 0;
++            } catch (android.os.RemoteException | RuntimeException e) {
++                Log.e(TAG, "OPLUS setChgConfig failed", e);
++                return false;
++            } finally {
++                reply.recycle();
++                data.recycle();
 +            }
 +        }
 +
