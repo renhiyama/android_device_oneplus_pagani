@@ -1,5 +1,5 @@
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
-index 91a5bdf..718535e 100644
+index 91a5bdf..9c800ec 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
 @@ -65,6 +65,8 @@ public class ChargingControlController extends LineageHealthFeature {
@@ -11,7 +11,7 @@ index 91a5bdf..718535e 100644
  
      // Internal state
      private float mBatteryPct;
-@@ -235,6 +237,46 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -235,6 +237,53 @@ public class ChargingControlController extends LineageHealthFeature {
                  && setStartTime(mDefaultStartTime) && setTargetTime(mDefaultTargetTime);
      }
  
@@ -49,8 +49,15 @@ index 91a5bdf..718535e 100644
 +            // enabled" (releases the FET, normal charging resumes).
 +            mChargingControl.setChargingEnabled(!bypassActive);
 +            return true;
-+        } catch (RemoteException e) {
-+            Log.e(TAG, "Failed to write bypass state to HAL", e);
++        } catch (RemoteException | RuntimeException e) {
++            // RuntimeException catches UnsupportedOperationException (returned
++            // by AIDL when the HAL replies EX_UNSUPPORTED_OPERATION — happens
++            // if the PLC kernel module isn't loaded yet at boot phase 1000,
++            // which is timing-sensitive especially with KernelSU patches that
++            // shift module load order). Letting it propagate would crash
++            // system_server and bootloop the device. We just log & soldier on;
++            // the next setting change or power event will retry.
++            Log.e(TAG, "Failed to write bypass state to HAL (HAL not ready?)", e);
 +            return false;
 +        }
 +    }
@@ -58,7 +65,7 @@ index 91a5bdf..718535e 100644
      private void updateBatteryInfo(Intent intent) {
          int battStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
          int battPlugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
-@@ -279,11 +321,15 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -279,11 +328,15 @@ public class ChargingControlController extends LineageHealthFeature {
          }
  
          // Register setting observer
@@ -75,7 +82,7 @@ index 91a5bdf..718535e 100644
      public boolean isChargingModeSupported(int mode) {
          try {
              return isSupported() && (mChargingControl.getSupportedMode() & mode) != 0;
-@@ -346,13 +392,18 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -346,13 +399,18 @@ public class ChargingControlController extends LineageHealthFeature {
              mBattReceiver = null;
          }
  
@@ -96,7 +103,7 @@ index 91a5bdf..718535e 100644
              return;
          }
  
-@@ -423,6 +474,24 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -423,6 +481,24 @@ public class ChargingControlController extends LineageHealthFeature {
              return;
          }
  
@@ -121,7 +128,7 @@ index 91a5bdf..718535e 100644
          if (!isEnabled() || mIsControlCancelledOnce || !mIsPowerConnected) {
              mCurrentProvider.disable();
              mChargingNotification.cancel();
-@@ -492,8 +561,12 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -492,8 +568,12 @@ public class ChargingControlController extends LineageHealthFeature {
      private void handleSettingChange() {
          int mode = getMode();
  
@@ -136,7 +143,7 @@ index 91a5bdf..718535e 100644
  
              if (mIsEnabled) {
                  if (mBattReceiver == null) {
-@@ -503,13 +576,13 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -503,13 +583,13 @@ public class ChargingControlController extends LineageHealthFeature {
                  }
                  IntentFilter battFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
                  mContext.registerReceiver(mBattReceiver, battFilter);
