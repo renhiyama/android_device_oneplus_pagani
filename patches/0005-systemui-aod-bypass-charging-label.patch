@@ -228,7 +228,7 @@ index 000000000..ac276ccd0
 +    }
 +}
 diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java b/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java
-index 20afa7545..fc9e41704 100644
+index 20afa7545..1d1158cfb 100644
 --- a/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java
 +++ b/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java
 @@ -1425,8 +1425,16 @@ public class KeyguardIndicationController {
@@ -259,26 +259,30 @@ index 20afa7545..fc9e41704 100644
              String chargingTimeFormatted = Formatter.formatShortElapsedTimeRoundingUpToMinutes(
                      mContext, mChargingTimeRemaining);
              String chargingText = mContext.getResources().getString(chargingId, chargingTimeFormatted,
-@@ -1518,6 +1527,26 @@ public class KeyguardIndicationController {
+@@ -1518,6 +1527,30 @@ public class KeyguardIndicationController {
          }
      }
  
++    private static final String BYPASS_CHARGING_NODE = "/sys/class/oplus_chg/common/plc";
++    private static final String BYPASS_CHARGING_ACTIVE_VALUE = "status=3";
++
 +    private boolean isBypassChargingActive() {
-+        // Read the user's manual override flag from LineageSettings rather than
-+        // poking sysfs — SystemUI runs as platform_app and a vendor sysfs node
-+        // would require sepolicy exemptions that don't generalize across ROMs.
-+        // Reading the setting is also the more accurate UX: the label reflects
-+        // the user's intent, not the kernel's transient state. (When bypass is
-+        // requested but the kernel briefly fails to engage it, we still want to
-+        // tell the user "Bypass Charging" instead of confusingly switching back
-+        // to "Charging".)
-+        try {
-+            return lineageos.providers.LineageSettings.System.getIntForUser(
-+                    mContext.getContentResolver(),
-+                    lineageos.providers.LineageSettings.System.BYPASS_CHARGING_ENABLED,
-+                    0,
-+                    UserHandle.USER_CURRENT) != 0;
-+        } catch (Exception e) {
++        // Read kernel state directly — the truth, not the user's intent. If the
++        // user enabled bypass but the kernel failed to engage (PLC subsystem
++        // not ready, transient charge protocol state, etc.), AOD shouldn't
++        // lie. status=3 is "PLC ENABLE" in the OPLUS kernel enum, status=2 is
++        // "NOT_ALLOW" / no active bypass request.
++        // Requires sepolicy `allow platform_app vendor_sysfs_usb_supply:{dir
++        // search; file r_file_perms};` — added in the device-tree sepolicy.
++        java.io.File node = new java.io.File(BYPASS_CHARGING_NODE);
++        if (!node.exists()) {
++            return false;
++        }
++        try (java.io.BufferedReader reader =
++                     new java.io.BufferedReader(new java.io.FileReader(node))) {
++            String line = reader.readLine();
++            return line != null && line.trim().equals(BYPASS_CHARGING_ACTIVE_VALUE);
++        } catch (java.io.IOException e) {
 +            return false;
 +        }
 +    }
