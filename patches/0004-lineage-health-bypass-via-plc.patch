@@ -1,0 +1,79 @@
+diff --git a/health/aidl/default/Android.bp b/health/aidl/default/Android.bp
+index 420a196..acbc0fa 100644
+--- a/health/aidl/default/Android.bp
++++ b/health/aidl/default/Android.bp
+@@ -77,6 +77,12 @@ cc_binary {
+     }) + select(soong_config_variable("lineage_health", "charging_control_charging_disabled"), {
+         any @ flag_val: ["-DHEALTH_CHARGING_CONTROL_CHARGING_DISABLED=\"" + flag_val + "\""],
+         default: ["-DHEALTH_CHARGING_CONTROL_CHARGING_DISABLED=\"0\""],
++    }) + select(soong_config_variable("lineage_health", "charging_control_charging_enabled_read"), {
++        any @ flag_val: ["-DHEALTH_CHARGING_CONTROL_CHARGING_ENABLED_READ=\"" + flag_val + "\""],
++        default: [],
++    }) + select(soong_config_variable("lineage_health", "charging_control_charging_disabled_read"), {
++        any @ flag_val: ["-DHEALTH_CHARGING_CONTROL_CHARGING_DISABLED_READ=\"" + flag_val + "\""],
++        default: [],
+     }) + select(soong_config_variable("lineage_health", "charging_control_supports_bypass"), {
+         true: ["-DHEALTH_CHARGING_CONTROL_SUPPORTS_BYPASS"],
+         false: [],
+diff --git a/health/aidl/default/ChargingControl.cpp b/health/aidl/default/ChargingControl.cpp
+index 9bcca91..3ab2fea 100644
+--- a/health/aidl/default/ChargingControl.cpp
++++ b/health/aidl/default/ChargingControl.cpp
+@@ -24,7 +24,18 @@ static const std::vector<ChargingEnabledNode> kChargingEnabledNodes = {
+         {HEALTH_CHARGING_CONTROL_CHARGING_PATH,
+          HEALTH_CHARGING_CONTROL_CHARGING_ENABLED,
+          HEALTH_CHARGING_CONTROL_CHARGING_DISABLED,
+-         {}},
++         {},
++#ifdef HEALTH_CHARGING_CONTROL_CHARGING_ENABLED_READ
++         HEALTH_CHARGING_CONTROL_CHARGING_ENABLED_READ,
++#else
++         {},
++#endif
++#ifdef HEALTH_CHARGING_CONTROL_CHARGING_DISABLED_READ
++         HEALTH_CHARGING_CONTROL_CHARGING_DISABLED_READ,
++#else
++         {},
++#endif
++        },
+ #else
+         {"/sys/class/power_supply/battery/battery_charging_enabled", "1", "0",
+          static_cast<int>(ChargingControlSupportedMode::TOGGLE) |
+@@ -145,9 +156,18 @@ ndk::ScopedAStatus ChargingControl::getChargingEnabled(bool* _aidl_return) {
+ 
+     content = android::base::Trim(content);
+ 
+-    if (content == mChargingEnabledNode->value_true) {
++    // Prefer the explicit read-back values if the node provided them (write
++    // and read formats can differ — e.g. PLC takes "switch=N|callname=…" but
++    // reports "status=N"). Fall back to comparing against the write values
++    // for backwards-compat with nodes that round-trip identically.
++    const std::string& expect_true =
++            mChargingEnabledNode->value_true_read.value_or(mChargingEnabledNode->value_true);
++    const std::string& expect_false =
++            mChargingEnabledNode->value_false_read.value_or(mChargingEnabledNode->value_false);
++
++    if (content == expect_true) {
+         *_aidl_return = true;
+-    } else if (content == mChargingEnabledNode->value_false) {
++    } else if (content == expect_false) {
+         *_aidl_return = false;
+     } else {
+         LOG(ERROR) << "Unknown value " << content;
+diff --git a/health/aidl/default/ChargingControl.h b/health/aidl/default/ChargingControl.h
+index ca2dabf..c7c9dbf 100644
+--- a/health/aidl/default/ChargingControl.h
++++ b/health/aidl/default/ChargingControl.h
+@@ -23,6 +23,12 @@ struct ChargingEnabledNode {
+     const std::string value_true;
+     const std::string value_false;
+     const std::optional<int> supported_mode;
++    // Optional read-back values, used when the node's read format differs from
++    // its write format (e.g. write "switch=1|callname=N" → read "status=3").
++    // When unset, getChargingEnabled() falls back to comparing against
++    // value_true / value_false.
++    const std::optional<std::string> value_true_read;
++    const std::optional<std::string> value_false_read;
+ };
+ 
+ struct ChargingLimitNode {
