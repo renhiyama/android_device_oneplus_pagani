@@ -1,3 +1,16 @@
+diff --git a/packages/SystemUI/res/values/config.xml b/packages/SystemUI/res/values/config.xml
+index 5d35fdf13..d756e62be 100644
+--- a/packages/SystemUI/res/values/config.xml
++++ b/packages/SystemUI/res/values/config.xml
+@@ -120,7 +120,7 @@
+ 
+     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
+     <string name="quick_settings_tiles_stock" translatable="false">
+-        internet,wifi,cell,bt,flashlight,dnd,modes_dnd,alarm,airplane,nfc,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,color_correction,dream,font_scaling,record_issue,hearing_devices,notes,desktopeffects,ambient_display,aod,caffeine,heads_up,powershare,profiles,reading_mode,sync,usb_tether,vpn,onthego,sound,dataswitch,volume_panel,locale,preferred_network,refresh_rate,compass,screenshot,dns,cpuinfo,fpsinfo,autobrightness,vpn_tethering,volume,weather,sleep_mode,smart_pixels
++        internet,wifi,cell,bt,flashlight,dnd,modes_dnd,alarm,airplane,nfc,controls,wallet,rotation,battery,cast,screenrecord,mictoggle,cameratoggle,location,hotspot,inversion,saver,dark,work,night,reverse,reduce_brightness,qr_code_scanner,onehanded,color_correction,dream,font_scaling,record_issue,hearing_devices,notes,desktopeffects,ambient_display,aod,bypass_charging,caffeine,heads_up,powershare,profiles,reading_mode,sync,usb_tether,vpn,onthego,sound,dataswitch,volume_panel,locale,preferred_network,refresh_rate,compass,screenshot,dns,cpuinfo,fpsinfo,autobrightness,vpn_tethering,volume,weather,sleep_mode,smart_pixels
+     </string>
+ 
+     <!-- The tiles to display in QuickSettings -->
 diff --git a/packages/SystemUI/res/values/evolution_strings.xml b/packages/SystemUI/res/values/evolution_strings.xml
 index d91be014d..c5486cdf6 100644
 --- a/packages/SystemUI/res/values/evolution_strings.xml
