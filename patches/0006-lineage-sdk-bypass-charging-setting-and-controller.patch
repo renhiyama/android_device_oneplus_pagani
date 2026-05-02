@@ -175,10 +175,10 @@ index 91a5bdf..70ca949 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..ca01322 100644
+index 0431c3e..552eaa3 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-@@ -161,6 +161,21 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -161,6 +161,40 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -197,14 +197,33 @@ index 0431c3e..ca01322 100644
 +            return mCCC != null && mCCC.setBypassChargingEnabled(enabled);
 +        }
 +
++        @Override
++        public boolean isBypassChargingActive() {
++            // Read kernel ground truth from sysfs. system_server runs in the
++            // system_server selinux domain which has read on
++            // vendor_sysfs_usb_supply via device-tree sepolicy.
++            // status=3 → PLC ENABLE (bypass active). status=2 → NOT_ALLOW.
++            java.io.File node = new java.io.File("/sys/class/oplus_chg/common/plc");
++            if (!node.exists()) {
++                return false;
++            }
++            try (java.io.BufferedReader r =
++                         new java.io.BufferedReader(new java.io.FileReader(node))) {
++                String line = r.readLine();
++                return line != null && line.trim().equals("status=3");
++            } catch (java.io.IOException e) {
++                return false;
++            }
++        }
++
          @Override
          public boolean isFastChargeSupported() {
              return mFCC.isSupported();
 diff --git a/sdk/src/java/lineageos/health/HealthInterface.java b/sdk/src/java/lineageos/health/HealthInterface.java
-index 40f438a..798008e 100644
+index 40f438a..1113277 100644
 --- a/sdk/src/java/lineageos/health/HealthInterface.java
 +++ b/sdk/src/java/lineageos/health/HealthInterface.java
-@@ -284,6 +284,42 @@ public class HealthInterface {
+@@ -284,6 +284,57 @@ public class HealthInterface {
          }
      }
  
@@ -244,14 +263,29 @@ index 40f438a..798008e 100644
 +        }
 +    }
 +
++    /**
++     * Returns whether the kernel has currently engaged bypass charging
++     * (battery FET held open, USB powering system). Reflects ground truth
++     * from sysfs, not user intent — so flipping {@link #setBypassChargingEnabled}
++     * to true does NOT immediately make this return true; it depends on the
++     * HAL successfully writing PLC and the kernel acknowledging.
++     */
++    public boolean isBypassChargingActive() {
++        try {
++            return checkService() && sService.isBypassChargingActive();
++        } catch (RemoteException e) {
++            return false;
++        }
++    }
++
      /**
       * Returns whether fast charge is supported
       *
 diff --git a/sdk/src/java/lineageos/health/IHealthInterface.aidl b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-index 633f104..841aa79 100644
+index 633f104..ae994ec 100644
 --- a/sdk/src/java/lineageos/health/IHealthInterface.aidl
 +++ b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-@@ -31,4 +31,11 @@ interface IHealthInterface {
+@@ -31,4 +31,22 @@ interface IHealthInterface {
      int[] getSupportedFastChargeModes();
      int getFastChargeMode();
      boolean setFastChargeMode(int mode);
@@ -262,6 +296,17 @@ index 633f104..841aa79 100644
 +    boolean isBypassChargingSupported();
 +    boolean getBypassChargingEnabled();
 +    boolean setBypassChargingEnabled(boolean enabled);
++    /**
++     * Returns whether the kernel has *currently* engaged the PLC bypass path
++     * (status=3 in /sys/class/oplus_chg/common/plc), independent of the
++     * user's request flag. Used by SystemUI for the AOD/lockscreen label so
++     * it reflects ground truth rather than user intent — if the user enabled
++     * bypass but the kernel didn't engage it (PLC subsystem race etc.), the
++     * label flips back to plain "Charging" so the user notices.
++     *
++     * Returns false on devices that don't expose the PLC sysfs node.
++     */
++    boolean isBypassChargingActive();
  }
 diff --git a/sdk/src/java/lineageos/providers/LineageSettings.java b/sdk/src/java/lineageos/providers/LineageSettings.java
 index 118251b..f5a4148 100644
