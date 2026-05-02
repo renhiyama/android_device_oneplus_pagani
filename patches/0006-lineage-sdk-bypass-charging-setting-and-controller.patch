@@ -175,10 +175,21 @@ index 91a5bdf..70ca949 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..6913809 100644
+index 0431c3e..e9ea94d 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-@@ -161,6 +161,106 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -39,6 +39,10 @@ public class HealthInterfaceService extends LineageSystemService {
+     private ChargingControlController mCCC;
+     private FastChargeController mFCC;
+ 
++    // Tracks the last successful bypass-toggle direction so isBypassChargingActive()
++    // can answer truthfully (Android's bat_status is too cached to use).
++    private static volatile boolean sLastBypassEnabled = false;
++
+     public HealthInterfaceService(Context context) {
+         super(context);
+         mContext = context;
+@@ -161,6 +165,99 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -206,38 +217,31 @@ index 0431c3e..6913809 100644
 +            // atomically. Reverse-engineered from /odm/bin/hw/vendor.oplus.
 +            // hardware.charger-V10-service + Battery.apk's BypassChargeController:
 +            // setChgConfig(flag=25, "1+switch=1"|"1+switch=0", caller=2).
-+            return callOplusSetChgConfig(25,
++            boolean ok = callOplusSetChgConfig(25,
 +                    enabled ? "1+switch=1" : "1+switch=0", 2);
++            if (ok) {
++                sLastBypassEnabled = enabled;
++            }
++            return ok;
 +        }
 +
 +        @Override
 +        public boolean isBypassChargingActive() {
-+            // Ground truth: USB plugged AND battery not actually charging.
-+            // PLC `status` is unreliable (always reads 3 once charger plugged);
-+            // battery/current_now is heavily cached. battery/status is the
-+            // simplest signal that flips reliably when the FET opens.
-+            try {
-+                java.io.File usbOnline =
-+                        new java.io.File("/sys/class/power_supply/usb/online");
-+                java.io.File batStatus =
-+                        new java.io.File("/sys/class/power_supply/battery/status");
-+                if (!usbOnline.exists() || !batStatus.exists()) {
-+                    return false;
-+                }
-+                try (java.io.BufferedReader r = new java.io.BufferedReader(
-+                        new java.io.FileReader(usbOnline))) {
-+                    String s = r.readLine();
-+                    if (s == null || !"1".equals(s.trim())) return false;
-+                }
-+                try (java.io.BufferedReader r = new java.io.BufferedReader(
-+                        new java.io.FileReader(batStatus))) {
-+                    String s = r.readLine();
-+                    if (s == null) return false;
-+                    String t = s.trim();
-+                    // Charger present but kernel says we're not pulling current
-+                    // → FET is open → bypass is engaged.
-+                    return "Not charging".equals(t) || "Discharging".equals(t);
-+                }
++            // Android's bat_status caches "Charging" for several seconds even
++            // after the FET opens; the OPLUS gauge MMS interface is the only
++            // node that reports fresh battery current, but it requires a write
++            // to item_id and selinux blocks that from system_server. So the
++            // best honest signal: did our last setBypassChargingEnabled(true)
++            // call succeed AND is USB still plugged in. Unplug → bypass clearly
++            // can't be doing anything → flip back to false.
++            if (!sLastBypassEnabled) {
++                return false;
++            }
++            try (java.io.BufferedReader r = new java.io.BufferedReader(
++                    new java.io.FileReader(
++                            "/sys/class/power_supply/usb/online"))) {
++                String s = r.readLine();
++                return s != null && "1".equals(s.trim());
 +            } catch (java.io.IOException e) {
 +                return false;
 +            }
