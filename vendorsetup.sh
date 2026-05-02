@@ -17,6 +17,9 @@ PAGANI_PATCH_MAP=(
     "0002-vintf-bump-subsys_radio-to-1-9.patch:hardware/oplus"
     "0003-oplus_chg_gki-populate-power-now-and-current-now.patch:kernel/oneplus/sm8750-modules"
     "0004-lineage-health-bypass-via-plc.patch:hardware/lineage/interfaces"
+    "0005-systemui-aod-bypass-charging-label.patch:frameworks/base"
+    "0006-lineage-sdk-bypass-charging-setting-and-controller.patch:lineage-sdk"
+    "0007-lineageparts-bypass-charging-toggle.patch:packages/apps/LineageParts"
 )
 
 if [ ! -f "${PAGANI_PATCH_MARKER}" ] || [ "${PAGANI_PATCHES_DIR}" -nt "${PAGANI_PATCH_MARKER}" ]; then
