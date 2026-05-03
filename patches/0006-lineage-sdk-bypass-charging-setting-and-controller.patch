@@ -414,7 +414,7 @@ index 91a5bdf..2724c8a 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..1b0eec5 100644
+index 0431c3e..7391d67 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 @@ -39,6 +39,10 @@ public class HealthInterfaceService extends LineageSystemService {
@@ -428,7 +428,7 @@ index 0431c3e..1b0eec5 100644
      public HealthInterfaceService(Context context) {
          super(context);
          mContext = context;
-@@ -161,6 +165,163 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -161,6 +165,186 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -559,32 +559,55 @@ index 0431c3e..1b0eec5 100644
 +                java.io.File volt = new java.io.File(
 +                        "/sys/class/power_supply/battery/voltage_now");
 +                if (!itemId.exists() || !data.exists() || !volt.exists()) {
++                    Log.w(TAG, "getRealChargingPower: a node is missing");
 +                    return 0;
 +                }
 +                try (java.io.FileWriter w = new java.io.FileWriter(itemId)) {
 +                    w.write("5");
++                } catch (Exception e) {
++                    Log.e(TAG, "getRealChargingPower: write item_id failed", e);
++                    return 0;
 +                }
 +                int current_mA;
 +                try (java.io.BufferedReader r = new java.io.BufferedReader(
 +                        new java.io.FileReader(data))) {
 +                    String s = r.readLine();
-+                    if (s == null) return 0;
++                    if (s == null) {
++                        Log.w(TAG, "getRealChargingPower: data read null");
++                        return 0;
++                    }
 +                    current_mA = Integer.parseInt(s.trim());
++                } catch (Exception e) {
++                    Log.e(TAG, "getRealChargingPower: read data failed", e);
++                    return 0;
 +                }
 +                int voltage_uV;
 +                try (java.io.BufferedReader r = new java.io.BufferedReader(
 +                        new java.io.FileReader(volt))) {
 +                    String s = r.readLine();
-+                    if (s == null) return 0;
++                    if (s == null) {
++                        Log.w(TAG, "getRealChargingPower: voltage_now null");
++                        return 0;
++                    }
 +                    voltage_uV = Integer.parseInt(s.trim());
++                } catch (Exception e) {
++                    Log.e(TAG, "getRealChargingPower: read voltage failed", e);
++                    return 0;
 +                }
 +                // Sign convention: gauge returns negative when charging.
 +                // Power display wants positive wattage when charging in.
 +                int current_uA = -current_mA * 1000;
-+                if (current_uA <= 0) return 0;
++                Log.i(TAG, "getRealChargingPower: gauge=" + current_mA
++                        + "mA voltage=" + voltage_uV + "uV");
++                if (current_uA <= 0) {
++                    return 0;
++                }
 +                // µW = (µA × µV) / 1e6
-+                return (int) ((long) current_uA * voltage_uV / 1_000_000L);
++                int uw = (int) ((long) current_uA * voltage_uV / 1_000_000L);
++                Log.i(TAG, "getRealChargingPower: returning " + uw + "uW");
++                return uw;
 +            } catch (Exception e) {
++                Log.e(TAG, "getRealChargingPower: outer exception", e);
 +                return 0;
 +            }
 +        }
