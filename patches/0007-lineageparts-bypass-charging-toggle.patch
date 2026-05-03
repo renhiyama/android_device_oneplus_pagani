@@ -1,22 +1,25 @@
 diff --git a/res/values/strings.xml b/res/values/strings.xml
-index fe0899c..0033a45 100644
+index fe0899c..36ec350 100644
 --- a/res/values/strings.xml
 +++ b/res/values/strings.xml
-@@ -71,6 +71,9 @@
+@@ -71,6 +71,12 @@
      <!-- Charging control settings -->
      <string name="charging_control_title">Charging control</string>
      <string name="charging_control_enable_title">Enable charging control</string>
 +    <!-- Bypass charging: device runs from external power while the battery FET is held open. -->
 +    <string name="bypass_charging_title">Bypass charging</string>
 +    <string name="bypass_charging_summary">Run the device directly from the charger while keeping the battery at its current level. Useful for gaming or sustained heavy load to reduce battery wear and heat.</string>
++    <!-- True Bypass: layered on top of normal Bypass. Auto-disables at 20% SoC. -->
++    <string name="true_bypass_charging_title">True bypass charging</string>
++    <string name="true_bypass_charging_summary">Fully isolate the battery — USB powers the device, battery neither charges nor drains. Auto-disables at 20%% to keep the phone running. Requires bypass charging above.</string>
      <string name="charging_control_mode_title">Charging mode</string>
      <string name="charging_control_mode_auto_title">Automatic schedule</string>
      <string name="charging_control_mode_auto_summary">Automatically determine when to start charging based on alarms set</string>
 diff --git a/res/xml/charging_control_settings.xml b/res/xml/charging_control_settings.xml
-index 850394b..ecdd186 100644
+index 850394b..f14b2f7 100644
 --- a/res/xml/charging_control_settings.xml
 +++ b/res/xml/charging_control_settings.xml
-@@ -11,6 +11,14 @@
+@@ -11,6 +11,24 @@
          android:key="charging_control_enabled"
          android:title="@string/charging_control_enable_title" />
  
@@ -28,11 +31,21 @@ index 850394b..ecdd186 100644
 +        android:title="@string/bypass_charging_title"
 +        android:summary="@string/bypass_charging_summary" />
 +
++    <!-- True Bypass: layered on top of normal Bypass. Calls OPLUS Smart
++         Charge Protection (flag 14) to fully open the battery FET.
++         Auto-disables at 20% SoC. android:dependency greys it out when
++         normal Bypass is off. -->
++    <lineageos.preference.LineageSystemSettingSwitchPreference
++        android:key="true_bypass_charging_enabled"
++        android:title="@string/true_bypass_charging_title"
++        android:summary="@string/true_bypass_charging_summary"
++        android:dependency="bypass_charging_enabled" />
++
      <lineageos.preference.LineageSystemSettingListPreference
          android:key="charging_control_mode"
          android:title="@string/charging_control_mode_title"
 diff --git a/src/org/lineageos/lineageparts/health/ChargingControlSettings.java b/src/org/lineageos/lineageparts/health/ChargingControlSettings.java
-index 912bc9a..1ae96d0 100644
+index 912bc9a..330d237 100644
 --- a/src/org/lineageos/lineageparts/health/ChargingControlSettings.java
 +++ b/src/org/lineageos/lineageparts/health/ChargingControlSettings.java
 @@ -23,6 +23,7 @@ import androidx.preference.PreferenceScreen;
@@ -43,11 +56,12 @@ index 912bc9a..1ae96d0 100644
  import lineageos.providers.LineageSettings;
  
  import org.lineageos.lineageparts.R;
-@@ -45,12 +46,14 @@ public class ChargingControlSettings extends SettingsPreferenceFragment implemen
+@@ -45,12 +46,16 @@ public class ChargingControlSettings extends SettingsPreferenceFragment implemen
      private static final String CHARGING_CONTROL_START_TIME_PREF = "charging_control_start_time";
      private static final String CHARGING_CONTROL_TARGET_TIME_PREF = "charging_control_target_time";
      private static final String CHARGING_CONTROL_LIMIT_PREF = "charging_control_charging_limit";
 +    private static final String BYPASS_CHARGING_PREF = "bypass_charging_enabled";
++    private static final String TRUE_BYPASS_CHARGING_PREF = "true_bypass_charging_enabled";
  
      private LineageSystemSettingMainSwitchPreference mChargingControlEnabledPref;
      private LineageSystemSettingListPreference mChargingControlModePref;
@@ -55,31 +69,49 @@ index 912bc9a..1ae96d0 100644
      private TargetTimePreference mChargingControlTargetTimePref;
      private ChargingLimitPreference mChargingControlLimitPref;
 +    private LineageSystemSettingSwitchPreference mBypassChargingPref;
++    private LineageSystemSettingSwitchPreference mTrueBypassChargingPref;
  
      private HealthInterface mHealthInterface;
  
-@@ -76,6 +79,14 @@ public class ChargingControlSettings extends SettingsPreferenceFragment implemen
+@@ -76,6 +81,24 @@ public class ChargingControlSettings extends SettingsPreferenceFragment implemen
          mChargingControlStartTimePref = prefSet.findPreference(CHARGING_CONTROL_START_TIME_PREF);
          mChargingControlTargetTimePref = prefSet.findPreference(CHARGING_CONTROL_TARGET_TIME_PREF);
          mChargingControlLimitPref = prefSet.findPreference(CHARGING_CONTROL_LIMIT_PREF);
 +        mBypassChargingPref = prefSet.findPreference(BYPASS_CHARGING_PREF);
++        mTrueBypassChargingPref = prefSet.findPreference(TRUE_BYPASS_CHARGING_PREF);
 +
 +        // Hide the bypass toggle entirely on devices whose HAL doesn't expose
 +        // the BYPASS mode — toggling it would be a no-op there.
 +        if (mBypassChargingPref != null && !mHealthInterface.isBypassChargingSupported()) {
 +            prefSet.removePreference(mBypassChargingPref);
 +            mBypassChargingPref = null;
++            // True Bypass is a strict superset — also hide it.
++            if (mTrueBypassChargingPref != null) {
++                prefSet.removePreference(mTrueBypassChargingPref);
++                mTrueBypassChargingPref = null;
++            }
++        } else if (mTrueBypassChargingPref != null
++                && !mHealthInterface.isTrueBypassChargingSupported()) {
++            prefSet.removePreference(mTrueBypassChargingPref);
++            mTrueBypassChargingPref = null;
 +        }
  
          if (mChargingControlLimitPref != null) {
              if (mHealthInterface.allowFineGrainedSettings()) {
-@@ -241,6 +252,9 @@ public class ChargingControlSettings extends SettingsPreferenceFragment implemen
+@@ -241,6 +264,16 @@ public class ChargingControlSettings extends SettingsPreferenceFragment implemen
                  result.add(CHARGING_CONTROL_START_TIME_PREF);
                  result.add(CHARGING_CONTROL_TARGET_TIME_PREF);
                  result.add(CHARGING_CONTROL_LIMIT_PREF);
 +                result.add(BYPASS_CHARGING_PREF);
-+            } else if (!HealthInterface.getInstance(context).isBypassChargingSupported()) {
-+                result.add(BYPASS_CHARGING_PREF);
++                result.add(TRUE_BYPASS_CHARGING_PREF);
++            } else {
++                final HealthInterface hi = HealthInterface.getInstance(context);
++                if (!hi.isBypassChargingSupported()) {
++                    result.add(BYPASS_CHARGING_PREF);
++                    result.add(TRUE_BYPASS_CHARGING_PREF);
++                } else if (!hi.isTrueBypassChargingSupported()) {
++                    result.add(TRUE_BYPASS_CHARGING_PREF);
++                }
              }
              return result;
          }

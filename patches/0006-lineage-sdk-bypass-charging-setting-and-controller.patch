@@ -1,17 +1,27 @@
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
-index 91a5bdf..659370a 100644
+index 91a5bdf..b2a43eb 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/ChargingControlController.java
-@@ -65,6 +65,8 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -65,6 +65,18 @@ public class ChargingControlController extends LineageHealthFeature {
              LineageSettings.System.CHARGING_CONTROL_START_TIME);
      private final Uri TARGET_TIME_URI = LineageSettings.System.getUriFor(
              LineageSettings.System.CHARGING_CONTROL_TARGET_TIME);
 +    private final Uri BYPASS_URI = LineageSettings.System.getUriFor(
 +            LineageSettings.System.BYPASS_CHARGING_ENABLED);
++    private final Uri TRUE_BYPASS_URI = LineageSettings.System.getUriFor(
++            LineageSettings.System.TRUE_BYPASS_CHARGING_ENABLED);
++
++    /**
++     * Below this SoC, both Bypass modes are paused so the phone can charge
++     * normally. Above it: user toggles apply.
++     *   - Normal Bypass: auto-resumes when SoC climbs back above the threshold
++     *   - True Bypass:   stays off after auto-pause; user must re-enable
++     */
++    private static final int BYPASS_LOW_BATTERY_THRESHOLD = 20;
  
      // Internal state
      private float mBatteryPct;
-@@ -235,6 +237,93 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -235,6 +247,246 @@ public class ChargingControlController extends LineageHealthFeature {
                  && setStartTime(mDefaultStartTime) && setTargetTime(mDefaultTargetTime);
      }
  
@@ -37,6 +47,159 @@ index 91a5bdf..659370a 100644
 +    public boolean isBypassChargingSupported() {
 +        return isChargingModeSupported(
 +                vendor.lineage.health.ChargingControlSupportedMode.BYPASS);
++    }
++
++    // True Bypass — fully opens the battery FET via OPLUS Smart Charge
++    // Protection (flag 14). Layered on top of normal Bypass: requires it
++    // to be enabled, and auto-pauses below the safety threshold.
++
++    public boolean isTrueBypassChargingSupported() {
++        // Same precondition as Normal Bypass — both rely on the OPLUS HAL.
++        return isBypassChargingSupported();
++    }
++
++    public boolean isTrueBypassChargingEnabled() {
++        return LineageSettings.System.getInt(mContentResolver,
++                LineageSettings.System.TRUE_BYPASS_CHARGING_ENABLED, 0) != 0;
++    }
++
++    public boolean setTrueBypassChargingEnabled(boolean enabled) {
++        putBoolean(LineageSettings.System.TRUE_BYPASS_CHARGING_ENABLED, enabled);
++        return true;
++    }
++
++    /**
++     * True iff: user enabled BOTH normal Bypass and True Bypass, USB is online,
++     * and SoC is above the safety threshold. Reflects ground-truth engagement.
++     */
++    public boolean isTrueBypassChargingActive() {
++        return isBypassChargingEnabled()
++                && isTrueBypassChargingEnabled()
++                && mIsPowerConnected
++                && mBatteryPct > BYPASS_LOW_BATTERY_THRESHOLD;
++    }
++
++    /** Tracks the last True Bypass smart-limit level we wrote, so we know
++     *  whether to release on the next tick. */
++    private int mLastTrueBypassLevel = -1;
++
++    /**
++     * Reconcile True Bypass engagement with current state. Engages OPLUS
++     * smart-limit at max(currentPct, 20) when all preconditions are met
++     * (Normal Bypass on, True Bypass on, USB plugged, SoC > 20%); auto-
++     * disables the user setting when SoC hits 20%; releases smart-limit
++     * + notification when not engaged. Idempotent — safe to call every
++     * updateChargeControl tick.
++     */
++    private void updateTrueBypassEngagement() {
++        final boolean userWants = isBypassChargingEnabled() && isTrueBypassChargingEnabled();
++        final boolean safeSoC = mBatteryPct > BYPASS_LOW_BATTERY_THRESHOLD;
++        final boolean shouldEngage = userWants && mIsPowerConnected && safeSoC;
++
++        if (shouldEngage) {
++            int level = Math.max((int) Math.floor(mBatteryPct),
++                    BYPASS_LOW_BATTERY_THRESHOLD);
++            if (level != mLastTrueBypassLevel) {
++                if (Util.callOplusSmartLimit(true, level)) {
++                    mLastTrueBypassLevel = level;
++                }
++            }
++            postTrueBypassNotification(level);
++        } else {
++            // Release smart-limit if previously engaged.
++            if (mLastTrueBypassLevel != -1) {
++                Util.callOplusSmartLimit(false, 100);
++                mLastTrueBypassLevel = -1;
++            }
++            // If user wanted it but SoC dropped to threshold, auto-disable
++            // and post a transient "low battery, reverted" notification.
++            if (userWants && mIsPowerConnected && !safeSoC) {
++                Log.i(TAG, "True Bypass auto-disabled: SoC " + mBatteryPct
++                        + " ≤ " + BYPASS_LOW_BATTERY_THRESHOLD);
++                setTrueBypassChargingEnabled(false);
++                postTrueBypassRevertNotification();
++            } else {
++                cancelTrueBypassNotification();
++            }
++        }
++    }
++
++    private static final int TRUE_BYPASS_NOTIFICATION_ID = 0xCC0F;
++    private static final String TRUE_BYPASS_NOTIFICATION_CHANNEL =
++            "lineage_health_true_bypass";
++    private boolean mTrueBypassChannelCreated = false;
++
++    private void ensureTrueBypassChannel(android.app.NotificationManager nm) {
++        if (mTrueBypassChannelCreated) return;
++        android.app.NotificationChannel ch = new android.app.NotificationChannel(
++                TRUE_BYPASS_NOTIFICATION_CHANNEL,
++                "True Bypass Charging",
++                android.app.NotificationManager.IMPORTANCE_LOW);
++        ch.setDescription(
++                "Active when True Bypass is engaged. Hide this category to "
++                + "suppress these notifications.");
++        ch.setShowBadge(false);
++        nm.createNotificationChannel(ch);
++        mTrueBypassChannelCreated = true;
++    }
++
++    private android.app.PendingIntent disableTrueBypassIntent() {
++        Intent intent = new Intent(
++                "org.lineageos.platform.health.action.DISABLE_TRUE_BYPASS");
++        intent.setPackage(mContext.getPackageName());
++        return android.app.PendingIntent.getBroadcast(mContext, 0, intent,
++                android.app.PendingIntent.FLAG_UPDATE_CURRENT
++                        | android.app.PendingIntent.FLAG_IMMUTABLE);
++    }
++
++    private void postTrueBypassNotification(int level) {
++        android.app.NotificationManager nm =
++                mContext.getSystemService(android.app.NotificationManager.class);
++        if (nm == null) return;
++        ensureTrueBypassChannel(nm);
++        android.app.Notification n = new android.app.Notification.Builder(
++                mContext, TRUE_BYPASS_NOTIFICATION_CHANNEL)
++                .setSmallIcon(android.R.drawable.ic_lock_idle_charging)
++                .setContentTitle("True Bypass active")
++                .setContentText("Battery FET fully open, no charging. Will "
++                        + "switch to Normal Bypass at "
++                        + BYPASS_LOW_BATTERY_THRESHOLD + "%.")
++                .setStyle(new android.app.Notification.BigTextStyle().bigText(
++                        "Power flowing direct from USB to system. Battery is "
++                        + "isolated to minimise wear. Will fall back to "
++                        + "Normal Bypass charging when battery reaches "
++                        + BYPASS_LOW_BATTERY_THRESHOLD + "%."))
++                .setOngoing(true)
++                .setShowWhen(false)
++                .addAction(new android.app.Notification.Action.Builder(
++                        android.R.drawable.ic_menu_close_clear_cancel,
++                        "Disable", disableTrueBypassIntent()).build())
++                .build();
++        nm.notify(TRUE_BYPASS_NOTIFICATION_ID, n);
++    }
++
++    private void postTrueBypassRevertNotification() {
++        android.app.NotificationManager nm =
++                mContext.getSystemService(android.app.NotificationManager.class);
++        if (nm == null) return;
++        ensureTrueBypassChannel(nm);
++        android.app.Notification n = new android.app.Notification.Builder(
++                mContext, TRUE_BYPASS_NOTIFICATION_CHANNEL)
++                .setSmallIcon(android.R.drawable.ic_lock_idle_charging)
++                .setContentTitle("Battery low — reverted to Normal Bypass")
++                .setContentText("Re-enable True Bypass from Settings → "
++                        + "Charging Control once charged.")
++                .setAutoCancel(true)
++                .build();
++        nm.notify(TRUE_BYPASS_NOTIFICATION_ID, n);
++    }
++
++    private void cancelTrueBypassNotification() {
++        android.app.NotificationManager nm =
++                mContext.getSystemService(android.app.NotificationManager.class);
++        if (nm != null) {
++            nm.cancel(TRUE_BYPASS_NOTIFICATION_ID);
++        }
 +    }
 +
 +    private boolean writeBypassToHal(boolean bypassActive) {
@@ -105,13 +268,25 @@ index 91a5bdf..659370a 100644
      private void updateBatteryInfo(Intent intent) {
          int battStatus = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
          int battPlugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
-@@ -279,11 +368,15 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -279,11 +531,27 @@ public class ChargingControlController extends LineageHealthFeature {
          }
  
          // Register setting observer
 -        registerSettings(MODE_URI, LIMIT_URI, ENABLED_URI, START_TIME_URI, TARGET_TIME_URI);
 +        registerSettings(MODE_URI, LIMIT_URI, ENABLED_URI, START_TIME_URI, TARGET_TIME_URI,
-+                BYPASS_URI);
++                BYPASS_URI, TRUE_BYPASS_URI);
++
++        // Listen for the True Bypass notification's "Disable" action.
++        IntentFilter f = new IntentFilter(
++                "org.lineageos.platform.health.action.DISABLE_TRUE_BYPASS");
++        mContext.registerReceiver(new BroadcastReceiver() {
++            @Override
++            public void onReceive(Context context, Intent intent) {
++                Log.i(TAG, "True Bypass disable action received from notification");
++                setTrueBypassChargingEnabled(false);
++                updateChargeControl();
++            }
++        }, f, Context.RECEIVER_NOT_EXPORTED);
  
          handleSettingChange();
      }
@@ -122,7 +297,7 @@ index 91a5bdf..659370a 100644
      public boolean isChargingModeSupported(int mode) {
          try {
              return isSupported() && (mChargingControl.getSupportedMode() & mode) != 0;
-@@ -346,13 +439,18 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -346,13 +614,18 @@ public class ChargingControlController extends LineageHealthFeature {
              mBattReceiver = null;
          }
  
@@ -143,14 +318,14 @@ index 91a5bdf..659370a 100644
              return;
          }
  
-@@ -420,8 +518,34 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -420,9 +693,45 @@ public class ChargingControlController extends LineageHealthFeature {
  
      protected void updateChargeControl() {
          if (mCurrentProvider == null) {
 +            Log.w(TAG, "updateChargeControl: mCurrentProvider=null, skipping");
-+            return;
-+        }
-+
+             return;
+         }
+ 
 +        // Manual bypass override wins over everything. The user explicitly
 +        // asked to bypass, so skip the provider state machine entirely.
 +        final boolean wantBypass = isBypassChargingEnabled() && mIsPowerConnected;
@@ -166,8 +341,10 @@ index 91a5bdf..659370a 100644
 +            mChargingNotification.cancel();
 +            writeBypassToHal(true);
 +            mLastBypassWritten = true;
-             return;
-         }
++            // Maybe also engage True Bypass on top.
++            updateTrueBypassEngagement();
++            return;
++        }
 +        // Bypass was previously active and just got turned off — release the
 +        // battery FET explicitly so charging can resume. (If Charging Control
 +        // is also enabled, its provider will immediately re-evaluate below.)
@@ -175,10 +352,19 @@ index 91a5bdf..659370a 100644
 +            writeBypassToHal(false);
 +            mLastBypassWritten = false;
 +        }
- 
++        // Normal Bypass is off — True Bypass implicitly off. Auto-disable
++        // the user setting so the UI checkbox reflects reality.
++        if (isTrueBypassChargingEnabled()) {
++            Log.i(TAG, "True Bypass auto-disabled: Normal Bypass turned off");
++            setTrueBypassChargingEnabled(false);
++        }
++        // Release any active smart-limit + clear notification.
++        updateTrueBypassEngagement();
++
          if (!isEnabled() || mIsControlCancelledOnce || !mIsPowerConnected) {
              mCurrentProvider.disable();
-@@ -492,8 +616,12 @@ public class ChargingControlController extends LineageHealthFeature {
+             mChargingNotification.cancel();
+@@ -492,8 +801,12 @@ public class ChargingControlController extends LineageHealthFeature {
      private void handleSettingChange() {
          int mode = getMode();
  
@@ -193,7 +379,7 @@ index 91a5bdf..659370a 100644
  
              if (mIsEnabled) {
                  if (mBattReceiver == null) {
-@@ -503,13 +631,13 @@ public class ChargingControlController extends LineageHealthFeature {
+@@ -503,13 +816,13 @@ public class ChargingControlController extends LineageHealthFeature {
                  }
                  IntentFilter battFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
                  mContext.registerReceiver(mBattReceiver, battFilter);
@@ -210,7 +396,7 @@ index 91a5bdf..659370a 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..e9ea94d 100644
+index 0431c3e..0886234 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 @@ -39,6 +39,10 @@ public class HealthInterfaceService extends LineageSystemService {
@@ -224,7 +410,7 @@ index 0431c3e..e9ea94d 100644
      public HealthInterfaceService(Context context) {
          super(context);
          mContext = context;
-@@ -161,6 +165,99 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -161,6 +165,119 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -319,6 +505,26 @@ index 0431c3e..e9ea94d 100644
 +                reply.recycle();
 +                data.recycle();
 +            }
++        }
++
++        @Override
++        public boolean isTrueBypassChargingSupported() {
++            return mCCC != null && mCCC.isTrueBypassChargingSupported();
++        }
++
++        @Override
++        public boolean getTrueBypassChargingEnabled() {
++            return mCCC != null && mCCC.isTrueBypassChargingEnabled();
++        }
++
++        @Override
++        public boolean setTrueBypassChargingEnabled(boolean enabled) {
++            return mCCC != null && mCCC.setTrueBypassChargingEnabled(enabled);
++        }
++
++        @Override
++        public boolean isTrueBypassChargingActive() {
++            return mCCC != null && mCCC.isTrueBypassChargingActive();
 +        }
 +
          @Override
@@ -500,10 +706,10 @@ index a66e77c..ae8922c 100644
              mIsLimitSet = false;
              mSavedTargetTime = 0;
 diff --git a/sdk/src/java/lineageos/health/HealthInterface.java b/sdk/src/java/lineageos/health/HealthInterface.java
-index 40f438a..1113277 100644
+index 40f438a..9dd1703 100644
 --- a/sdk/src/java/lineageos/health/HealthInterface.java
 +++ b/sdk/src/java/lineageos/health/HealthInterface.java
-@@ -284,6 +284,57 @@ public class HealthInterface {
+@@ -284,6 +284,106 @@ public class HealthInterface {
          }
      }
  
@@ -558,14 +764,63 @@ index 40f438a..1113277 100644
 +        }
 +    }
 +
++    /**
++     * Whether True Bypass charging is supported on this device. Requires the
++     * OPLUS Smart Charge Protection AIDL (charger HAL flag 14) to be present.
++     */
++    public boolean isTrueBypassChargingSupported() {
++        try {
++            return checkService() && sService.isTrueBypassChargingSupported();
++        } catch (RemoteException e) {
++            return false;
++        }
++    }
++
++    /**
++     * Returns the True Bypass user intent (Settings value), independent of
++     * whether it's currently engaged.
++     */
++    public boolean getTrueBypassChargingEnabled() {
++        try {
++            return checkService() && sService.getTrueBypassChargingEnabled();
++        } catch (RemoteException e) {
++            return false;
++        }
++    }
++
++    /**
++     * Toggle True Bypass user intent. Engagement also depends on Normal Bypass
++     * being enabled and battery > 20%; auto-disables at the threshold.
++     */
++    public boolean setTrueBypassChargingEnabled(boolean enabled) {
++        try {
++            return checkService() && sService.setTrueBypassChargingEnabled(enabled);
++        } catch (RemoteException e) {
++            return false;
++        }
++    }
++
++    /**
++     * True iff user has both Normal and True Bypass enabled, USB is plugged,
++     * and battery is above the 20% safety threshold. Used by the AOD label
++     * + the persistent notification to know what to display.
++     */
++    public boolean isTrueBypassChargingActive() {
++        try {
++            return checkService() && sService.isTrueBypassChargingActive();
++        } catch (RemoteException e) {
++            return false;
++        }
++    }
++
      /**
       * Returns whether fast charge is supported
       *
 diff --git a/sdk/src/java/lineageos/health/IHealthInterface.aidl b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-index 633f104..ae994ec 100644
+index 633f104..8f926d7 100644
 --- a/sdk/src/java/lineageos/health/IHealthInterface.aidl
 +++ b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-@@ -31,4 +31,22 @@ interface IHealthInterface {
+@@ -31,4 +31,35 @@ interface IHealthInterface {
      int[] getSupportedFastChargeModes();
      int getFastChargeMode();
      boolean setFastChargeMode(int mode);
@@ -587,12 +842,25 @@ index 633f104..ae994ec 100644
 +     * Returns false on devices that don't expose the PLC sysfs node.
 +     */
 +    boolean isBypassChargingActive();
++
++    // True Bypass charging — fully opens the battery FET via OPLUS Smart
++    // Charge Protection (flag 14). Builds on top of normal Bypass; auto-
++    // disables at ≤ 20% SoC and stays off until user re-enables.
++    boolean isTrueBypassChargingSupported();
++    boolean getTrueBypassChargingEnabled();
++    boolean setTrueBypassChargingEnabled(boolean enabled);
++    /**
++     * Returns whether True Bypass is *currently* engaged (USB plugged AND
++     * battery > 20% safety threshold AND user has both Normal and True
++     * Bypass enabled). Reflects ground truth.
++     */
++    boolean isTrueBypassChargingActive();
  }
 diff --git a/sdk/src/java/lineageos/providers/LineageSettings.java b/sdk/src/java/lineageos/providers/LineageSettings.java
-index 118251b..f5a4148 100644
+index 118251b..b31b0f6 100644
 --- a/sdk/src/java/lineageos/providers/LineageSettings.java
 +++ b/sdk/src/java/lineageos/providers/LineageSettings.java
-@@ -1432,6 +1432,20 @@ public final class LineageSettings {
+@@ -1432,6 +1432,36 @@ public final class LineageSettings {
          public static final Validator CHARGING_CONTROL_LIMIT_VALIDATOR =
                  new InclusiveIntegerRangeValidator(70, 100);
  
@@ -610,14 +878,32 @@ index 118251b..f5a4148 100644
 +        public static final Validator BYPASS_CHARGING_ENABLED_VALIDATOR =
 +                sBooleanValidator;
 +
++        /**
++         * Whether True Bypass charging is enabled. Builds on top of normal
++         * Bypass — when true, drives the OPLUS Smart Charge Protection AIDL
++         * (flag 14) to fully open the battery FET so USB powers the system
++         * directly. Normal Bypass (flag 25, "halve mode") must also be
++         * enabled for True Bypass to engage. Auto-disables at ≤ 20% SoC and
++         * stays off until user re-enables.
++         * The value is boolean (1 or 0).
++         */
++        public static final String TRUE_BYPASS_CHARGING_ENABLED =
++                "true_bypass_charging_enabled";
++
++        /** @hide */
++        public static final Validator TRUE_BYPASS_CHARGING_ENABLED_VALIDATOR =
++                sBooleanValidator;
++
          /**
           * Fast charging mode
           */
-@@ -2212,6 +2226,7 @@ public final class LineageSettings {
+@@ -2212,6 +2242,9 @@ public final class LineageSettings {
              VALIDATORS.put(CHARGING_CONTROL_START_TIME, CHARGING_CONTROL_START_TIME_VALIDATOR);
              VALIDATORS.put(CHARGING_CONTROL_TARGET_TIME, CHARGING_CONTROL_TARGET_TIME_VALIDATOR);
              VALIDATORS.put(CHARGING_CONTROL_LIMIT, CHARGING_CONTROL_LIMIT_VALIDATOR);
 +            VALIDATORS.put(BYPASS_CHARGING_ENABLED, BYPASS_CHARGING_ENABLED_VALIDATOR);
++            VALIDATORS.put(TRUE_BYPASS_CHARGING_ENABLED,
++                    TRUE_BYPASS_CHARGING_ENABLED_VALIDATOR);
              VALIDATORS.put(FAST_CHARGE_MODE, FAST_CHARGE_MODE_VALIDATOR);
              VALIDATORS.put(BATTERY_LIGHT_ENABLED, BATTERY_LIGHT_ENABLED_VALIDATOR);
              VALIDATORS.put(BATTERY_LIGHT_FULL_CHARGE_DISABLED,
