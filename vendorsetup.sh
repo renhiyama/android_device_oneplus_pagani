@@ -20,6 +20,7 @@ PAGANI_PATCH_MAP=(
     "0005-systemui-aod-bypass-charging-label.patch:frameworks/base"
     "0006-lineage-sdk-bypass-charging-setting-and-controller.patch:lineage-sdk"
     "0007-lineageparts-bypass-charging-toggle.patch:packages/apps/LineageParts"
+    "0008-settings-show-real-charging-power.patch:packages/apps/Settings"
 )
 
 if [ ! -f "${PAGANI_PATCH_MARKER}" ] || [ "${PAGANI_PATCHES_DIR}" -nt "${PAGANI_PATCH_MARKER}" ]; then

@@ -414,7 +414,7 @@ index 91a5bdf..2724c8a 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..f5aea37 100644
+index 0431c3e..1b0eec5 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 @@ -39,6 +39,10 @@ public class HealthInterfaceService extends LineageSystemService {
@@ -428,7 +428,7 @@ index 0431c3e..f5aea37 100644
      public HealthInterfaceService(Context context) {
          super(context);
          mContext = context;
-@@ -161,6 +165,117 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -161,6 +165,163 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -541,6 +541,52 @@ index 0431c3e..f5aea37 100644
 +        @Override
 +        public boolean isTrueBypassChargingActive() {
 +            return mCCC != null && mCCC.isTrueBypassChargingActive();
++        }
++
++        @Override
++        public int getRealChargingPowerMicrowatts() {
++            // OPLUS gauge MMS interface — the only source for fresh battery
++            // current that responds to bypass toggles. The standard
++            // power_supply/battery/{current_now,power_now} on this device
++            // are populated by our kernel patch from cpa_get_actual_used_power
++            // (= adapter rated capability), so they don't reflect actual
++            // flow. Reading the gauge requires writing item_id=5 first.
++            try {
++                java.io.File itemId =
++                        new java.io.File("/sys/class/oplus_mms/gauge/item_id");
++                java.io.File data =
++                        new java.io.File("/sys/class/oplus_mms/gauge/data");
++                java.io.File volt = new java.io.File(
++                        "/sys/class/power_supply/battery/voltage_now");
++                if (!itemId.exists() || !data.exists() || !volt.exists()) {
++                    return 0;
++                }
++                try (java.io.FileWriter w = new java.io.FileWriter(itemId)) {
++                    w.write("5");
++                }
++                int current_mA;
++                try (java.io.BufferedReader r = new java.io.BufferedReader(
++                        new java.io.FileReader(data))) {
++                    String s = r.readLine();
++                    if (s == null) return 0;
++                    current_mA = Integer.parseInt(s.trim());
++                }
++                int voltage_uV;
++                try (java.io.BufferedReader r = new java.io.BufferedReader(
++                        new java.io.FileReader(volt))) {
++                    String s = r.readLine();
++                    if (s == null) return 0;
++                    voltage_uV = Integer.parseInt(s.trim());
++                }
++                // Sign convention: gauge returns negative when charging.
++                // Power display wants positive wattage when charging in.
++                int current_uA = -current_mA * 1000;
++                if (current_uA <= 0) return 0;
++                // µW = (µA × µV) / 1e6
++                return (int) ((long) current_uA * voltage_uV / 1_000_000L);
++            } catch (Exception e) {
++                return 0;
++            }
 +        }
 +
          @Override
@@ -722,10 +768,10 @@ index a66e77c..ae8922c 100644
              mIsLimitSet = false;
              mSavedTargetTime = 0;
 diff --git a/sdk/src/java/lineageos/health/HealthInterface.java b/sdk/src/java/lineageos/health/HealthInterface.java
-index 40f438a..9dd1703 100644
+index 40f438a..be36032 100644
 --- a/sdk/src/java/lineageos/health/HealthInterface.java
 +++ b/sdk/src/java/lineageos/health/HealthInterface.java
-@@ -284,6 +284,106 @@ public class HealthInterface {
+@@ -284,6 +284,118 @@ public class HealthInterface {
          }
      }
  
@@ -829,14 +875,26 @@ index 40f438a..9dd1703 100644
 +        }
 +    }
 +
++    /**
++     * Real-time charging power in microwatts (battery current × voltage).
++     * Returns 0 if not charging or unavailable.
++     */
++    public int getRealChargingPowerMicrowatts() {
++        try {
++            return checkService() ? sService.getRealChargingPowerMicrowatts() : 0;
++        } catch (RemoteException e) {
++            return 0;
++        }
++    }
++
      /**
       * Returns whether fast charge is supported
       *
 diff --git a/sdk/src/java/lineageos/health/IHealthInterface.aidl b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-index 633f104..8f926d7 100644
+index 633f104..675047d 100644
 --- a/sdk/src/java/lineageos/health/IHealthInterface.aidl
 +++ b/sdk/src/java/lineageos/health/IHealthInterface.aidl
-@@ -31,4 +31,35 @@ interface IHealthInterface {
+@@ -31,4 +31,44 @@ interface IHealthInterface {
      int[] getSupportedFastChargeModes();
      int getFastChargeMode();
      boolean setFastChargeMode(int mode);
@@ -871,12 +929,21 @@ index 633f104..8f926d7 100644
 +     * Bypass enabled). Reflects ground truth.
 +     */
 +    boolean isTrueBypassChargingActive();
++
++    /**
++     * Real-time charging power in microwatts, computed from the OPLUS gauge
++     * MMS interface (battery current × voltage). Reflects what the cable
++     * power meter would show. Returns 0 if the device isn't charging or the
++     * gauge can't be read. Used by the lock screen "show real power" toggle
++     * to override the default adapter-rating display.
++     */
++    int getRealChargingPowerMicrowatts();
  }
 diff --git a/sdk/src/java/lineageos/providers/LineageSettings.java b/sdk/src/java/lineageos/providers/LineageSettings.java
-index 118251b..b31b0f6 100644
+index 118251b..3c40c5a 100644
 --- a/sdk/src/java/lineageos/providers/LineageSettings.java
 +++ b/sdk/src/java/lineageos/providers/LineageSettings.java
-@@ -1432,6 +1432,36 @@ public final class LineageSettings {
+@@ -1432,6 +1432,51 @@ public final class LineageSettings {
          public static final Validator CHARGING_CONTROL_LIMIT_VALIDATOR =
                  new InclusiveIntegerRangeValidator(70, 100);
  
@@ -910,16 +977,33 @@ index 118251b..b31b0f6 100644
 +        public static final Validator TRUE_BYPASS_CHARGING_ENABLED_VALIDATOR =
 +                sBooleanValidator;
 +
++        /**
++         * Whether the lock screen charging indicator should show real-time
++         * power flow (computed from battery/current_now × voltage_now)
++         * instead of the adapter's rated capability. Default off — matches
++         * stock AOSP behaviour, which displays the negotiated charger
++         * capability ("80 W charger") rather than instantaneous draw.
++         * The value is boolean (1 or 0).
++         */
++        public static final String SHOW_REAL_CHARGING_POWER =
++                "show_real_charging_power";
++
++        /** @hide */
++        public static final Validator SHOW_REAL_CHARGING_POWER_VALIDATOR =
++                sBooleanValidator;
++
          /**
           * Fast charging mode
           */
-@@ -2212,6 +2242,9 @@ public final class LineageSettings {
+@@ -2212,6 +2257,11 @@ public final class LineageSettings {
              VALIDATORS.put(CHARGING_CONTROL_START_TIME, CHARGING_CONTROL_START_TIME_VALIDATOR);
              VALIDATORS.put(CHARGING_CONTROL_TARGET_TIME, CHARGING_CONTROL_TARGET_TIME_VALIDATOR);
              VALIDATORS.put(CHARGING_CONTROL_LIMIT, CHARGING_CONTROL_LIMIT_VALIDATOR);
 +            VALIDATORS.put(BYPASS_CHARGING_ENABLED, BYPASS_CHARGING_ENABLED_VALIDATOR);
 +            VALIDATORS.put(TRUE_BYPASS_CHARGING_ENABLED,
 +                    TRUE_BYPASS_CHARGING_ENABLED_VALIDATOR);
++            VALIDATORS.put(SHOW_REAL_CHARGING_POWER,
++                    SHOW_REAL_CHARGING_POWER_VALIDATOR);
              VALIDATORS.put(FAST_CHARGE_MODE, FAST_CHARGE_MODE_VALIDATOR);
              VALIDATORS.put(BATTERY_LIGHT_ENABLED, BATTERY_LIGHT_ENABLED_VALIDATOR);
              VALIDATORS.put(BATTERY_LIGHT_FULL_CHARGE_DISABLED,

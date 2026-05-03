@@ -98,7 +98,7 @@ index fecf399df..6d0b1a015 100644
          @IntoMap
          @StringKey(CAFFEINE_TILE_SPEC)
 diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java b/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java
-index 20afa7545..e9796cfba 100644
+index 20afa7545..94a2f6bdc 100644
 --- a/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java
 +++ b/packages/SystemUI/src/com/android/systemui/statusbar/KeyguardIndicationController.java
 @@ -1425,8 +1425,20 @@ public class KeyguardIndicationController {
@@ -133,7 +133,7 @@ index 20afa7545..e9796cfba 100644
              String chargingTimeFormatted = Formatter.formatShortElapsedTimeRoundingUpToMinutes(
                      mContext, mChargingTimeRemaining);
              String chargingText = mContext.getResources().getString(chargingId, chargingTimeFormatted,
-@@ -1518,6 +1531,29 @@ public class KeyguardIndicationController {
+@@ -1518,6 +1531,45 @@ public class KeyguardIndicationController {
          }
      }
  
@@ -160,9 +160,42 @@ index 20afa7545..e9796cfba 100644
 +        }
 +    }
 +
++    private boolean isShowRealChargingPower() {
++        return lineageos.providers.LineageSettings.System.getInt(
++                mContext.getContentResolver(),
++                lineageos.providers.LineageSettings.System
++                        .SHOW_REAL_CHARGING_POWER, 0) == 1;
++    }
++
++    private int getRealChargingPowerMicrowatts() {
++        try {
++            return lineageos.health.HealthInterface.getInstance(mContext)
++                    .getRealChargingPowerMicrowatts();
++        } catch (Exception e) {
++            return 0;
++        }
++    }
++
      public void setStatusBarKeyguardViewManager(
              StatusBarKeyguardViewManager statusBarKeyguardViewManager) {
          mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
+@@ -1683,6 +1735,16 @@ public class KeyguardIndicationController {
+                     batteryIntent, status.maxChargingVoltage);
+             mChargingWattage = getRealtimeChargingWattage(
+                     mChargingCurrent, mChargingVoltage, status.maxChargingWattage);
++            // When the user has enabled "show real charging power" the
++            // adapter-rated value is misleading (it's just the negotiated
++            // capability, not what's actually flowing). Replace with the
++            // gauge-based real reading from system_server.
++            if (isShowRealChargingPower()) {
++                int realUw = getRealChargingPowerMicrowatts();
++                if (realUw > 0) {
++                    mChargingWattage = realUw;
++                }
++            }
+             mChargingSpeed = status.getChargingSpeed(mContext);
+             mChargingStatus = status.chargingStatus;
+             mBatteryLevel = status.level;
 diff --git a/packages/SystemUI/src/com/android/systemui/qs/tiles/BypassChargingTile.java b/packages/SystemUI/src/com/android/systemui/qs/tiles/BypassChargingTile.java
 new file mode 100644
 index 000000000..ac276ccd0
