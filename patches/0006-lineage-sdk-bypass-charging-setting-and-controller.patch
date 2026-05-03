@@ -399,7 +399,7 @@ index 91a5bdf..7b302b9 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..0886234 100644
+index 0431c3e..f5aea37 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 @@ -39,6 +39,10 @@ public class HealthInterfaceService extends LineageSystemService {
@@ -413,7 +413,7 @@ index 0431c3e..0886234 100644
      public HealthInterfaceService(Context context) {
          super(context);
          mContext = context;
-@@ -161,6 +165,119 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -161,6 +165,117 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -451,14 +451,12 @@ index 0431c3e..0886234 100644
 +
 +        @Override
 +        public boolean isBypassChargingActive() {
-+            // Android's bat_status caches "Charging" for several seconds even
-+            // after the FET opens; the OPLUS gauge MMS interface is the only
-+            // node that reports fresh battery current, but it requires a write
-+            // to item_id and selinux blocks that from system_server. So the
-+            // best honest signal: did our last setBypassChargingEnabled(true)
-+            // call succeed AND is USB still plugged in. Unplug → bypass clearly
-+            // can't be doing anything → flip back to false.
-+            if (!sLastBypassEnabled) {
++            // User-intent + USB-online is more reliable than tracking AIDL
++            // call success across reboots. LineageSettings persists; the
++            // sLastBypassEnabled cache resets to false on every system_server
++            // restart and would make the AOD label silently disappear after
++            // a reboot until the user toggled bypass off and on again.
++            if (mCCC == null || !mCCC.isBypassChargingEnabled()) {
 +                return false;
 +            }
 +            try (java.io.BufferedReader r = new java.io.BufferedReader(
