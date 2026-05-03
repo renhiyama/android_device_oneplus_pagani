@@ -414,7 +414,7 @@ index 91a5bdf..2724c8a 100644
          }
  
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
-index 0431c3e..7391d67 100644
+index 0431c3e..a3e7aec 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/HealthInterfaceService.java
 @@ -39,6 +39,10 @@ public class HealthInterfaceService extends LineageSystemService {
@@ -428,7 +428,7 @@ index 0431c3e..7391d67 100644
      public HealthInterfaceService(Context context) {
          super(context);
          mContext = context;
-@@ -161,6 +165,186 @@ public class HealthInterfaceService extends LineageSystemService {
+@@ -161,6 +165,144 @@ public class HealthInterfaceService extends LineageSystemService {
                      || mCCC.isChargingModeSupported(ChargingControlSupportedMode.LIMIT);
          }
  
@@ -545,70 +545,28 @@ index 0431c3e..7391d67 100644
 +
 +        @Override
 +        public int getRealChargingPowerMicrowatts() {
-+            // OPLUS gauge MMS interface — the only source for fresh battery
-+            // current that responds to bypass toggles. The standard
-+            // power_supply/battery/{current_now,power_now} on this device
-+            // are populated by our kernel patch from cpa_get_actual_used_power
-+            // (= adapter rated capability), so they don't reflect actual
-+            // flow. Reading the gauge requires writing item_id=5 first.
++            // Read USB-side voltage * current. Battery-side current_now on
++            // this device is a charger setpoint (perfectly steady, doesn't
++            // reflect real draw); only USB nodes track instantaneous flow.
 +            try {
-+                java.io.File itemId =
-+                        new java.io.File("/sys/class/oplus_mms/gauge/item_id");
-+                java.io.File data =
-+                        new java.io.File("/sys/class/oplus_mms/gauge/data");
-+                java.io.File volt = new java.io.File(
-+                        "/sys/class/power_supply/battery/voltage_now");
-+                if (!itemId.exists() || !data.exists() || !volt.exists()) {
-+                    Log.w(TAG, "getRealChargingPower: a node is missing");
++                int voltage_uV = readIntFromFile("/sys/class/power_supply/usb/voltage_now");
++                int current_uA = readIntFromFile("/sys/class/power_supply/usb/current_now");
++                if (voltage_uV <= 0 || current_uA <= 0) {
 +                    return 0;
 +                }
-+                try (java.io.FileWriter w = new java.io.FileWriter(itemId)) {
-+                    w.write("5");
-+                } catch (Exception e) {
-+                    Log.e(TAG, "getRealChargingPower: write item_id failed", e);
-+                    return 0;
-+                }
-+                int current_mA;
-+                try (java.io.BufferedReader r = new java.io.BufferedReader(
-+                        new java.io.FileReader(data))) {
-+                    String s = r.readLine();
-+                    if (s == null) {
-+                        Log.w(TAG, "getRealChargingPower: data read null");
-+                        return 0;
-+                    }
-+                    current_mA = Integer.parseInt(s.trim());
-+                } catch (Exception e) {
-+                    Log.e(TAG, "getRealChargingPower: read data failed", e);
-+                    return 0;
-+                }
-+                int voltage_uV;
-+                try (java.io.BufferedReader r = new java.io.BufferedReader(
-+                        new java.io.FileReader(volt))) {
-+                    String s = r.readLine();
-+                    if (s == null) {
-+                        Log.w(TAG, "getRealChargingPower: voltage_now null");
-+                        return 0;
-+                    }
-+                    voltage_uV = Integer.parseInt(s.trim());
-+                } catch (Exception e) {
-+                    Log.e(TAG, "getRealChargingPower: read voltage failed", e);
-+                    return 0;
-+                }
-+                // Sign convention: gauge returns negative when charging.
-+                // Power display wants positive wattage when charging in.
-+                int current_uA = -current_mA * 1000;
-+                Log.i(TAG, "getRealChargingPower: gauge=" + current_mA
-+                        + "mA voltage=" + voltage_uV + "uV");
-+                if (current_uA <= 0) {
-+                    return 0;
-+                }
-+                // µW = (µA × µV) / 1e6
-+                int uw = (int) ((long) current_uA * voltage_uV / 1_000_000L);
-+                Log.i(TAG, "getRealChargingPower: returning " + uw + "uW");
++                int uw = (int) ((long) current_uA * voltage_uV / 1000000L);
++                Log.i(TAG, "getRealChargingPower: V=" + voltage_uV + " I=" + current_uA + " uW=" + uw);
 +                return uw;
 +            } catch (Exception e) {
-+                Log.e(TAG, "getRealChargingPower: outer exception", e);
++                Log.e(TAG, "getRealChargingPower: exception", e);
 +                return 0;
++            }
++        }
++
++        private static int readIntFromFile(String path) throws java.io.IOException {
++            try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(path))) {
++                String s = r.readLine();
++                return s == null ? 0 : Integer.parseInt(s.trim());
 +            }
 +        }
 +
