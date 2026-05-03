@@ -1,5 +1,5 @@
 diff --git a/res/values/strings.xml b/res/values/strings.xml
-index fe0899c..576aca0 100644
+index fe0899c..2ac0b94 100644
 --- a/res/values/strings.xml
 +++ b/res/values/strings.xml
 @@ -71,6 +71,12 @@
@@ -11,7 +11,7 @@ index fe0899c..576aca0 100644
 +    <string name="bypass_charging_summary">Run the device directly from the charger while keeping the battery at its current level. Useful for gaming or sustained heavy load to reduce battery wear and heat.</string>
 +    <!-- True Bypass: layered on top of normal Bypass. Auto-disables at 20% SoC. -->
 +    <string name="true_bypass_charging_title">True bypass charging</string>
-+    <string name="true_bypass_charging_summary">Fully isolate the battery — USB powers the device, battery neither charges nor drains. Auto-disables at 20% to keep the phone running. Requires bypass charging above.</string>
++    <string name="true_bypass_charging_summary">Powers the device entirely from USB and prevents any current flow to or from the battery. Automatically disables when the battery reaches 20% to prevent depletion. Requires bypass charging to be enabled.</string>
      <string name="charging_control_mode_title">Charging mode</string>
      <string name="charging_control_mode_auto_title">Automatic schedule</string>
      <string name="charging_control_mode_auto_summary">Automatically determine when to start charging based on alarms set</string>
