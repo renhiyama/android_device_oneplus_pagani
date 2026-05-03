@@ -325,7 +325,7 @@ index 0431c3e..e9ea94d 100644
          public boolean isFastChargeSupported() {
              return mFCC.isSupported();
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java
-index 1486467..70bc2ff 100644
+index 1486467..31ae807 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/Util.java
 @@ -6,7 +6,12 @@
@@ -341,7 +341,7 @@ index 1486467..70bc2ff 100644
  
  import java.text.SimpleDateFormat;
  import java.time.LocalDate;
-@@ -55,6 +60,52 @@ public class Util {
+@@ -55,6 +60,95 @@ public class Util {
       * @param time seconds of the day
       * @return UTC milliseconds from epoch
       */
@@ -391,11 +391,54 @@ index 1486467..70bc2ff 100644
 +        }
 +    }
 +
++    /**
++     * Engage OPLUS "Smart Charge Protection" — the declarative charge-limit
++     * feature exposed by the V10 charger HAL. Tell the service the level,
++     * the service holds the line autonomously (no polling required from us).
++     *
++     * Reverse-engineered from OOS Battery.apk SmartChargeProtectionController:
++     * setChgConfig(flag=14, "2++<switch>+<level>", caller=2).
++     *
++     * Use this for MODE_LIMIT instead of repeatedly toggling the bypass flag —
++     * bypass (flag 25) silently no-ops at high SoC, smart-protection doesn't.
++     */
++    public static boolean callOplusSmartLimit(boolean enable, int levelPct) {
++        IBinder binder = ServiceManager.getService(
++                "vendor.oplus.hardware.charger.ICharger/default");
++        if (binder == null) {
++            Log.w("LineageHealth", "OPLUS charger HAL not available");
++            return false;
++        }
++        Parcel data = Parcel.obtain();
++        Parcel reply = Parcel.obtain();
++        try {
++            data.writeInterfaceToken("vendor.oplus.hardware.charger.ICharger");
++            data.writeInt(14);                                   // ChgFuncFlag = smart-limit
++            data.writeString("2++" + (enable ? "1" : "0") + "+" + levelPct);
++            data.writeInt(2);                                    // caller
++            if (!binder.transact(127, data, reply, 0)) {
++                Log.e("LineageHealth", "OPLUS smart-limit transact returned false");
++                return false;
++            }
++            reply.readException();
++            int result = reply.readInt();
++            Log.i("LineageHealth", "OPLUS smartLimit("
++                    + (enable ? "ON@" + levelPct : "OFF") + ") = " + result);
++            return result == 0;
++        } catch (RemoteException | RuntimeException e) {
++            Log.e("LineageHealth", "OPLUS smart-limit failed", e);
++            return false;
++        } finally {
++            reply.recycle();
++            data.recycle();
++        }
++    }
++
      static public long getTimeMillisFromSecondOfDay(int time) {
          ZoneId utcZone = ZoneOffset.UTC;
          LocalDate currentDate = LocalDate.now();
 diff --git a/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java b/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java
-index a66e77c..f1ccf84 100644
+index a66e77c..ae8922c 100644
 --- a/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java
 +++ b/lineage/lib/main/java/org/lineageos/platform/internal/health/ccprovider/Toggle.java
 @@ -21,6 +21,7 @@ import android.os.BatteryUsageStats;
@@ -406,7 +449,18 @@ index a66e77c..f1ccf84 100644
  
  import vendor.lineage.health.ChargingControlSupportedMode;
  import vendor.lineage.health.IChargingControl;
-@@ -197,17 +198,25 @@ public class Toggle extends ChargingControlProvider {
+@@ -97,6 +98,10 @@ public class Toggle extends ChargingControlProvider {
+         mIsLimitSet = shouldStopCharging(currentPct, targetPct);
+         Log.i(TAG, "Current battery level: " + currentPct + ", target: " + targetPct +
+                 ", limit set: " + mIsLimitSet);
++        // Declare the limit to OPLUS's Smart Charge Protection. Once told the
++        // level, the service holds it autonomously — the bypass-style flag 25
++        // silently no-ops at high SoC but flag 14 (smart-limit) is sticky.
++        Util.callOplusSmartLimit(mIsLimitSet, targetPct);
+         return setChargingEnabled(!mIsLimitSet);
+     }
+ 
+@@ -197,17 +202,25 @@ public class Toggle extends ChargingControlProvider {
      }
  
      private boolean setChargingEnabled(boolean enabled) {
@@ -435,6 +489,16 @@ index a66e77c..f1ccf84 100644
      }
  
      @Override
+@@ -223,6 +236,9 @@ public class Toggle extends ChargingControlProvider {
+     @Override
+     protected void onReset() {
+         try {
++            // Release any active OPLUS smart-limit. Level is irrelevant when
++            // disabling.
++            Util.callOplusSmartLimit(false, 100);
+             mChargingControl.setChargingEnabled(true);
+             mIsLimitSet = false;
+             mSavedTargetTime = 0;
 diff --git a/sdk/src/java/lineageos/health/HealthInterface.java b/sdk/src/java/lineageos/health/HealthInterface.java
 index 40f438a..1113277 100644
 --- a/sdk/src/java/lineageos/health/HealthInterface.java
