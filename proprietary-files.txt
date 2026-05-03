@@ -7,8 +7,19 @@
 # sm8750-common ships MTP_acdb_cal.acdb + MTP_workspaceFileXml.qwsp under
 # sun_mtp; adding a second acdb_cal.acdb would break gauge_init / speaker
 # protection and silence the speakers.
+odm/etc/acdbdata/acdb_cal.acdb
 odm/etc/acdbdata/up_ve_enpuv5_ha.eai
 odm/etc/acdbdata/up_ve_enpuv5_hh.eai
+
+# ADSP modules
+# TFA98xx voltage/current feedback DSP modules — required for OPLUS speaker
+# protection's VI feedback path. Without these, PAL_OplusSpeakerProtection's
+# txPcm open fails and the smart-PA stays muted as protection fallback.
+# Pulled from OnePlus 13T (PKX110, same SoC + same Smart-PA HW as 13s);
+# OEM 13s dump is missing these but they work because Pakala-class kernel
+# loads them via fastrpc on demand.
+odm/lib/rfsa/adsp/libtfadsp_sb5_5_rx.so
+odm/lib/rfsa/adsp/libtfadsp_sb5_5_tx.so
 
 # Audio
 odm/lib64/liboprec_audrec.so
@@ -1256,9 +1267,12 @@ vendor/etc/spr_cfg_AA594_P_7_A0020_dsc_cmd_mode_panel.xml
 
 
 # eSIM
-odm/bin/hw/vendor.oplus.hardware.esim@1.0-service
-odm/etc/init/esim@1.0-service.rc
-odm/etc/vintf/manifest/manifest_oplus_esim.xml
+# All esim entries are already provided by sm8750-common — keep this
+# device-tree's blob list pruned to avoid the soong "found in multiple
+# namespaces" error during build.
+# odm/bin/hw/vendor.oplus.hardware.esim@1.0-service
+# odm/etc/init/esim@1.0-service.rc
+# odm/etc/vintf/manifest/manifest_oplus_esim.xml
 
 # eUICC
 my_product/etc/permissions/EuiccGoogle_grant_permissions_list.xml:product/etc/permissions/privapp-permissions-euiccgoogle.xml
