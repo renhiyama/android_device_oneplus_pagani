@@ -31,6 +31,7 @@ public final class ActionRegistry {
         new Item(Constants.ACTION_SCREENSHOT, R.string.action_screenshot, R.string.action_screenshot_desc, R.drawable.ic_screenshot, R.color.accent_screenshot),
         new Item(Constants.ACTION_RECORDER,   R.string.action_recorder,   R.string.action_recorder_desc,   R.drawable.ic_recorder,   R.color.accent_recorder),
         new Item(Constants.ACTION_TRANSLATE,  R.string.action_translate,  R.string.action_translate_desc,  R.drawable.ic_translate,  R.color.accent_translate),
+        new Item(Constants.ACTION_OPEN_APP,   R.string.action_open_app,   R.string.action_open_app_desc,   R.drawable.ic_open_app,   R.color.accent_open_app),
         new Item(Constants.ACTION_NONE,       R.string.action_none,       R.string.action_none_desc,       R.drawable.ic_noaction,   R.color.accent_none)
     );
 

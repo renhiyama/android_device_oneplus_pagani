@@ -35,6 +35,7 @@ public final class ActionDispatcher {
             case Constants.ACTION_SCREENSHOT:  return new ScreenshotAction();
             case Constants.ACTION_RECORDER:    return new RecorderAction();
             case Constants.ACTION_TRANSLATE:   return new TranslateAction();
+            case Constants.ACTION_OPEN_APP:    return new OpenAppAction();
             default: return null;
         }
     }

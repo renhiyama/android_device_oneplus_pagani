@@ -3,7 +3,6 @@ package com.oplus.pluskey.actions;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.media.AudioManager;
-import android.widget.Toast;
 
 import com.oplus.pluskey.R;
 
@@ -51,8 +50,8 @@ public class SoundVibrationAction implements Action {
         switch (next) {
             case AudioManager.RINGER_MODE_SILENT:  Haptics.tickOnce(ctx); break;
             case AudioManager.RINGER_MODE_VIBRATE: Haptics.tickTwice(ctx); break;
-            case AudioManager.RINGER_MODE_NORMAL:  Haptics.heavy(ctx); break;
+            case AudioManager.RINGER_MODE_NORMAL:  Haptics.longBuzz(ctx); break;
         }
-        Toast.makeText(ctx, toast, Toast.LENGTH_SHORT).show();
+        Feedback.show(ctx, toast);
     }
 }

@@ -13,33 +13,42 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.oplus.pluskey.R;
 
 /**
- * Horizontal RecyclerView adapter for the action chip row at the bottom of
- * the settings screen. Tapping a chip notifies the listener so the activity
- * can update the central pill + persist the new selection.
+ * Horizontal RecyclerView adapter for the action chip row. Selection is
+ * driven from the outside by {@link #setCenteredPosition(int)} — the
+ * Activity uses a LinearSnapHelper + scroll listener to figure out which
+ * chip is currently in the centre slot, and tells us so we can render the
+ * full-opacity / accent-tinted state on the right item.
+ *
+ * <p>Tapping a chip invokes the listener, which in the Activity simply
+ * smooth-scrolls that chip to the centre. The new centre then propagates
+ * back through {@link #setCenteredPosition(int)} on snap, keeping a single
+ * source of truth: "centred chip == focused action".
  */
 public class ActionChipAdapter extends RecyclerView.Adapter<ActionChipAdapter.VH> {
 
-    public interface OnSelected { void onSelected(int actionId, int positionInList); }
+    public interface OnTap { void onTap(int positionInList); }
 
     private final Context mCtx;
-    private final OnSelected mListener;
-    private int mSelectedPos;
+    private final OnTap mListener;
+    private int mCenteredPos;
 
-    public ActionChipAdapter(Context ctx, int initialActionId, OnSelected listener) {
+    public ActionChipAdapter(Context ctx, int initialActionId, OnTap listener) {
         mCtx = ctx;
         mListener = listener;
-        mSelectedPos = ActionRegistry.indexOf(initialActionId);
+        mCenteredPos = ActionRegistry.indexOf(initialActionId);
     }
 
-    public void selectByPosition(int pos) {
-        int prev = mSelectedPos;
+    /** Caller (Activity) tells us which chip is currently centred. We just
+     *  redraw the affected items; we do not move the list. */
+    public void setCenteredPosition(int pos) {
+        int prev = mCenteredPos;
         if (prev == pos) return;
-        mSelectedPos = pos;
+        mCenteredPos = pos;
         notifyItemChanged(prev);
         notifyItemChanged(pos);
     }
 
-    public int getSelectedPosition() { return mSelectedPos; }
+    public int getCenteredPosition() { return mCenteredPos; }
 
     @NonNull
     @Override
@@ -54,21 +63,13 @@ public class ActionChipAdapter extends RecyclerView.Adapter<ActionChipAdapter.VH
         ActionRegistry.Item item = ActionRegistry.get(pos);
         h.icon.setImageResource(item.icon);
 
-        boolean selected = pos == mSelectedPos;
+        boolean centered = pos == mCenteredPos;
         int accent = mCtx.getColor(item.color);
-        // muted icon when not selected — when selected, full accent
-        int tint = selected ? accent : 0xFF6B6B6B;
+        int tint = centered ? accent : 0xFF6B6B6B;
         h.icon.setImageTintList(ColorStateList.valueOf(tint));
 
-        h.itemView.setAlpha(selected ? 1f : 0.65f);
-        h.itemView.setOnClickListener(v -> {
-            if (mSelectedPos == pos) return;
-            int prev = mSelectedPos;
-            mSelectedPos = pos;
-            notifyItemChanged(prev);
-            notifyItemChanged(pos);
-            mListener.onSelected(item.id, pos);
-        });
+        h.itemView.setAlpha(centered ? 1f : 0.55f);
+        h.itemView.setOnClickListener(v -> mListener.onTap(pos));
     }
 
     @Override

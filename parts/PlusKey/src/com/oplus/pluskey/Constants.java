@@ -19,15 +19,26 @@ public final class Constants {
     public static final int ACTION_DND           = 2;
     public static final int ACTION_CAMERA        = 3;
     public static final int ACTION_FLASHLIGHT    = 4;
-    public static final int ACTION_SCREENSHOT   = 5;
-    public static final int ACTION_RECORDER      = 6;  // TODO
-    public static final int ACTION_TRANSLATE     = 7;  // TODO
+    public static final int ACTION_SCREENSHOT    = 5;
+    public static final int ACTION_RECORDER      = 6;
+    public static final int ACTION_TRANSLATE     = 7;
+    public static final int ACTION_OPEN_APP      = 8;
 
-    public static final int DEFAULT_ACTION = ACTION_SOUND_VIB;
+    /** Sentinel returned by Settings.getAction() when the user has never
+     *  picked an action. Distinct from ACTION_NONE (an explicit "do nothing"
+     *  choice). On long-press in this state the receiver opens the picker
+     *  Activity instead of dispatching anything. */
+    public static final int ACTION_UNSET = -1;
+
+    /** Initial value shown on the chip row when the user has never picked
+     *  anything. Not persisted until they tap "Set". */
+    public static final int DEFAULT_DISPLAY_ACTION = ACTION_SOUND_VIB;
 
     // ===== Settings.System keys =====
     public static final String KEY_PLUSKEY_ACTION       = "pluskey_action";
     public static final String KEY_PLUSKEY_CAMERA_MODE  = "pluskey_camera_mode";
+    /** Package name of the user-chosen "Open app" target (string). */
+    public static final String KEY_PLUSKEY_OPEN_APP_PKG = "pluskey_open_app_pkg";
 
     // ===== camera mode IDs (passed to camera intent extras) =====
     public static final int CAM_MODE_PHOTO     = 0;

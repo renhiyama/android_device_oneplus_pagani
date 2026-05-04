@@ -54,6 +54,16 @@
             </intent-filter>
         </activity>
 
+        <!-- App picker for the "Open app" action. Opened from PlusKeyActivity
+             when the user taps the action while no target package is set,
+             and from OpenAppAction itself if the chosen app got uninstalled. -->
+        <activity
+            android:name=".ui.AppPickerActivity"
+            android:exported="false"
+            android:label="@string/action_open_app_pick_title"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.PlusKey"/>
+
         <!-- Receives long-press broadcast from the patched PhoneWindowManager
              (frameworks/base patches/0010-pwm-pluskey-handler.patch). -->
         <receiver
@@ -62,6 +72,18 @@
             android:directBootAware="true">
             <intent-filter>
                 <action android:name="com.oplus.pluskey.LONG_PRESS"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- Auto-launches Google Translate the moment its install completes,
+             so the Translate action's "send user to Play Store" detour
+             continues seamlessly into "open the app" on the user's behalf. -->
+        <receiver
+            android:name=".service.TranslateInstallReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED"/>
+                <data android:scheme="package"/>
             </intent-filter>
         </receiver>
     </application>

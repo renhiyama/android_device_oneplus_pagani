@@ -33,9 +33,28 @@ public final class Haptics {
         v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK), ATTR);
     }
 
+    /** Long, sustained buzz used for "Ring" mode confirmation — distinct
+     *  from the short tick used for Silent and the double tick used for
+     *  Vibrate, so the user can tell modes apart by feel alone. */
+    public static void longBuzz(Context ctx) {
+        Vibrator v = ctx.getSystemService(Vibrator.class);
+        if (v == null || !v.hasVibrator()) return;
+        v.vibrate(VibrationEffect.createWaveform(
+                new long[]{0, 220}, new int[]{0, 220}, -1), ATTR);
+    }
+
     public static void confirm(Context ctx) {
         Vibrator v = ctx.getSystemService(Vibrator.class);
         if (v == null || !v.hasVibrator()) return;
         v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK), ATTR);
+    }
+
+    /** Sub-tick used by the chip row when the centred function changes — a
+     *  premium "detent" feel like a knob clicking through positions. Soft
+     *  enough to fire dozens per fling without being annoying. */
+    public static void scrollDetent(Context ctx) {
+        Vibrator v = ctx.getSystemService(Vibrator.class);
+        if (v == null || !v.hasVibrator()) return;
+        v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TEXTURE_TICK), ATTR);
     }
 }

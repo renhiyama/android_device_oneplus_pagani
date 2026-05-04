@@ -26,6 +26,19 @@ public class PlusKeyReceiver extends BroadcastReceiver {
         if (!ACTION_LONG_PRESS.equals(intent.getAction())) return;
         int actionId = Settings.getAction(ctx);
         Log.i(Constants.TAG, "long-press → action=" + actionId);
+
+        // First-run: user has never picked an action. Open the picker
+        // instead of silently doing nothing — this is the only place the
+        // first long-press is observable, so it's the right moment to
+        // walk them into the Settings UI.
+        if (actionId == Constants.ACTION_UNSET) {
+            Intent settings = new Intent("com.oplus.pluskey.SETTINGS")
+                    .setPackage(ctx.getPackageName())
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(settings);
+            return;
+        }
+
         new ActionDispatcher(ctx).dispatch(actionId);
     }
 }

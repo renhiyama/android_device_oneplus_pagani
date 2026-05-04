@@ -5,7 +5,6 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.oplus.pluskey.Constants;
 import com.oplus.pluskey.R;
@@ -25,7 +24,7 @@ public class FlashlightAction implements Action {
         try {
             String camId = pickRearCamera(cm);
             if (camId == null) {
-                Toast.makeText(ctx, R.string.feedback_flash_unavailable, Toast.LENGTH_SHORT).show();
+                Feedback.show(ctx, R.string.feedback_flash_unavailable);
                 return;
             }
             sTorchCameraId = camId;

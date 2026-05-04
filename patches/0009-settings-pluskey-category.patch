@@ -1,54 +1,3 @@
-diff --git a/res/values/strings.xml b/res/values/strings.xml
-index 4949f90..25ee49f 100644
---- a/res/values/strings.xml
-+++ b/res/values/strings.xml
-@@ -14949,4 +14949,11 @@
-     <string name="safety_center_device_finder_search_terms"></string>
-     <!-- Safety Center system component update search terms [CHAR LIMIT=NONE] -->
-     <string name="safety_center_system_component_update_search_terms"></string>
-+
-+    <!-- Plus Key & AI top-level category (added by EvoX device tree). -->
-+    <string name="top_level_pluskey_title">Plus Key</string>
-+    <string name="top_level_pluskey_summary">Customize the side button</string>
-+    <string name="top_level_ai_title">AI</string>
-+    <string name="top_level_ai_summary">On-device AI features (coming soon)</string>
- </resources>
-+
-diff --git a/res/xml/top_level_settings.xml b/res/xml/top_level_settings.xml
-index 7b29c61..6c51ddb 100644
---- a/res/xml/top_level_settings.xml
-+++ b/res/xml/top_level_settings.xml
-@@ -138,6 +138,30 @@
-             settings:controller="com.android.settings.display.TopLevelWallpaperPreferenceController"/>
-     </PreferenceCategory>
- 
-+
-+    <PreferenceCategory
-+        android:order="-115"
-+        android:key="top_level_pluskey_category"
-+        android:layout="@layout/settingslib_expressive_untitled_preference_category">
-+        <com.android.settings.widget.HomepagePreference
-+            android:icon="@drawable/ic_settings_pluskey"
-+            android:key="top_level_pluskey"
-+            android:order="-20"
-+            android:title="@string/top_level_pluskey_title"
-+            android:summary="@string/top_level_pluskey_summary">
-+            <intent android:action="com.oplus.pluskey.SETTINGS"/>
-+        </com.android.settings.widget.HomepagePreference>
-+
-+        <com.android.settings.widget.HomepagePreference
-+            android:icon="@drawable/ic_settings_ai"
-+            android:key="top_level_ai"
-+            android:order="-10"
-+            android:title="@string/top_level_ai_title"
-+            android:summary="@string/top_level_ai_summary">
-+            <intent android:action="com.oplus.pluskey.AI_SETTINGS"/>
-+        </com.android.settings.widget.HomepagePreference>
-+    </PreferenceCategory>
-+
-     <PreferenceCategory
-         android:order="-110"
-         android:key="top_level_system_info_category"
 diff --git a/res/drawable/ic_settings_ai.xml b/res/drawable/ic_settings_ai.xml
 new file mode 100644
 index 0000000..b3d8547
@@ -83,3 +32,95 @@ index 0000000..027773e
 +        android:fillColor="@android:color/white"
 +        android:pathData="M11.25,8 h1.5 v3.25 h3.25 v1.5 h-3.25 v3.25 h-1.5 v-3.25 h-3.25 v-1.5 h3.25 z"/>
 +</vector>
+diff --git a/res/values/strings.xml b/res/values/strings.xml
+index 4949f90..4bf1eed 100644
+--- a/res/values/strings.xml
++++ b/res/values/strings.xml
+@@ -14949,4 +14949,10 @@
+     <string name="safety_center_device_finder_search_terms"></string>
+     <!-- Safety Center system component update search terms [CHAR LIMIT=NONE] -->
+     <string name="safety_center_system_component_update_search_terms"></string>
++
++    <!-- Plus Key & AI top-level category (added by EvoX device tree). -->
++    <string name="top_level_pluskey_title">Plus Key</string>
++    <string name="top_level_pluskey_summary">Customize the side button</string>
++    <string name="top_level_ai_title">AI</string>
++    <string name="top_level_ai_summary">On-device AI features (coming soon)</string>
+ </resources>
+diff --git a/res/xml/top_level_settings.xml b/res/xml/top_level_settings.xml
+index 7b29c61..e032711 100644
+--- a/res/xml/top_level_settings.xml
++++ b/res/xml/top_level_settings.xml
+@@ -138,6 +138,34 @@
+             settings:controller="com.android.settings.display.TopLevelWallpaperPreferenceController"/>
+     </PreferenceCategory>
+ 
++
++    <PreferenceCategory
++        android:order="-115"
++        android:key="top_level_pluskey_category"
++        android:layout="@layout/settingslib_expressive_untitled_preference_category">
++        <com.android.settings.widget.HomepagePreference
++            android:icon="@drawable/ic_settings_pluskey"
++            android:key="top_level_pluskey"
++            android:order="-20"
++            android:title="@string/top_level_pluskey_title"
++            android:summary="@string/top_level_pluskey_summary">
++            <intent android:action="android.intent.action.MAIN"
++                    android:targetPackage="com.oplus.pluskey"
++                    android:targetClass="com.oplus.pluskey.ui.PlusKeyActivity"/>
++        </com.android.settings.widget.HomepagePreference>
++
++        <com.android.settings.widget.HomepagePreference
++            android:icon="@drawable/ic_settings_ai"
++            android:key="top_level_ai"
++            android:order="-10"
++            android:title="@string/top_level_ai_title"
++            android:summary="@string/top_level_ai_summary">
++            <intent android:action="android.intent.action.MAIN"
++                    android:targetPackage="com.oplus.pluskey"
++                    android:targetClass="com.oplus.pluskey.ui.AiActivity"/>
++        </com.android.settings.widget.HomepagePreference>
++    </PreferenceCategory>
++
+     <PreferenceCategory
+         android:order="-110"
+         android:key="top_level_system_info_category"
+diff --git a/res/xml/top_level_settings_expressive.xml b/res/xml/top_level_settings_expressive.xml
+index ed7794a..8b4c048 100644
+--- a/res/xml/top_level_settings_expressive.xml
++++ b/res/xml/top_level_settings_expressive.xml
+@@ -132,6 +132,33 @@
+             settings:controller="com.android.settings.display.TopLevelWallpaperPreferenceController"/>
+     </com.android.settingslib.widget.UntitledPreferenceCategory>
+ 
++    <com.android.settingslib.widget.UntitledPreferenceCategory
++        android:order="-115"
++        android:key="top_level_pluskey_category"
++        android:layout="@layout/settingslib_expressive_untitled_preference_category">
++        <com.android.settings.widget.HomepagePreference
++            android:icon="@drawable/ic_settings_pluskey"
++            android:key="top_level_pluskey"
++            android:order="-20"
++            android:title="@string/top_level_pluskey_title"
++            android:summary="@string/top_level_pluskey_summary">
++            <intent android:action="android.intent.action.MAIN"
++                    android:targetPackage="com.oplus.pluskey"
++                    android:targetClass="com.oplus.pluskey.ui.PlusKeyActivity"/>
++        </com.android.settings.widget.HomepagePreference>
++
++        <com.android.settings.widget.HomepagePreference
++            android:icon="@drawable/ic_settings_ai"
++            android:key="top_level_ai"
++            android:order="-10"
++            android:title="@string/top_level_ai_title"
++            android:summary="@string/top_level_ai_summary">
++            <intent android:action="android.intent.action.MAIN"
++                    android:targetPackage="com.oplus.pluskey"
++                    android:targetClass="com.oplus.pluskey.ui.AiActivity"/>
++        </com.android.settings.widget.HomepagePreference>
++    </com.android.settingslib.widget.UntitledPreferenceCategory>
++
+     <com.android.settingslib.widget.UntitledPreferenceCategory
+         android:order="-110"
+         android:key="top_level_system_info_category"

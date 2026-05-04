@@ -10,6 +10,7 @@
     <color name="accent_screenshot">#5BC0EB</color> <!-- sky -->
     <color name="accent_recorder">#FF6FB1</color>   <!-- pink -->
     <color name="accent_translate">#4DD699</color>  <!-- mint -->
+    <color name="accent_open_app">#9C8CFF</color>   <!-- soft violet -->
     <color name="accent_none">#7C8794</color>       <!-- slate (muted) -->
 
     <color name="oval_dim">#212121</color>
