@@ -38,3 +38,8 @@ include vendor/oneplus/pagani/BoardConfigVendor.mk
 # anything outside ro.vendor./vendor./persist.vendor./etc. Dodge sm8750-common
 # tree relies on this escape hatch.
 BUILD_BROKEN_VENDOR_PROPERTY_NAMESPACE := true
+
+# Disable LineageOS-built generic NXP JavaCard StrongBox HAL service. OEM
+# libjc_keymint3.nxp is keymint AIDL V3, our tree is V4 → unbridgeable without
+# shadowing half the upstream keymaster lib chain. Use TEE StrongBox instead.
+TARGET_NO_JAVACARD_STRONGBOX := true

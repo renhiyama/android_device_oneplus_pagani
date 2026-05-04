@@ -1,13 +1,22 @@
 ## All proprietary files from this list, unless pinned and noted otherwise,
 ## are from OnePlus 13s (CPH2723_16.3.501(EX01)).
-# ACDB
-# NOTE: do NOT auto-copy odm/etc/acdbdata/acdb_cal.acdb into
-# vendor/etc/acdbdata/sun_mtp/. The ACDB lib hard-fails when a directory
-# contains more than one *.acdb (or *.qwsp) file: "max 2 files".
-# sm8750-common ships MTP_acdb_cal.acdb + MTP_workspaceFileXml.qwsp under
-# sun_mtp; adding a second acdb_cal.acdb would break gauge_init / speaker
-# protection and silence the speakers.
+# ACDB — OEM 13s acdb_cal.acdb extracted to /odm/etc/acdbdata/ (the path
+# the audio HAL chain reads when paired with the libtfadsp ADSP firmware
+# below). This + the two libtfadsp .so files are exactly what the v3 KSU
+# audio module bind-mounts to make speakers work — replicated here as
+# real ROM extractions so it works without the module.
+#
+# The acdb_cal.acdb is auto-mirrored to BOTH paths:
+#   - /odm/etc/acdbdata/acdb_cal.acdb        (v3 module installs here)
+#   - /vendor/etc/acdbdata/sun_mtp/acdb_cal.acdb  (AGM hardcoded reads here;
+#     `cannot open acdb path /vendor/etc/acdbdata/sun_mtp` if missing)
+# Only ONE *.acdb may exist in sun_mtp/. Do NOT also extract sm8750-common's
+# vendor/etc/acdbdata/sun_mtp/MTP_acdb_cal.acdb — having two .acdb in that
+# dir trips the ACDB lib's "max 2 files" check and respawn-loops audiohal.
+# Also do NOT extract sm8750-common's odm/lib/rfsa/adsp/aiboost/signed/*
+# — basename collision with top-level libQnnHtpV79Skel.so.
 odm/etc/acdbdata/acdb_cal.acdb
+odm/etc/acdbdata/acdb_cal.acdb:vendor/etc/acdbdata/sun_mtp/acdb_cal.acdb
 odm/etc/acdbdata/up_ve_enpuv5_ha.eai
 odm/etc/acdbdata/up_ve_enpuv5_hh.eai
 
@@ -58,6 +67,13 @@ odm/etc/audio/oprec_audrec_params/oprec_record_ID8_Fast.bin
 odm/etc/audio/oprec_audrec_params/oprec_record_ID99_Bypass.bin
 odm/etc/audio/oprec_audrec_params/oprec_record_ID9_HE.bin
 odm/etc/audio/oprec_audrec_params/oprec_record_calibration.bin
+
+# JavaCard StrongBox: intentionally NOT extracted. OEM libjc_keymint3.nxp links
+# against keymint AIDL V3 but Android 16 ships V4; pulling in OEM's V3 chain
+# requires shadowing 5+ upstream libs (lib_android_keymaster_keymint_utils,
+# libkeymaster_portable, libsoft_attestation_cert, etc.) which is high-risk.
+# Falling back to TEE StrongBox (Qualcomm's, already on /vendor) — see
+# TARGET_NO_JAVACARD_STRONGBOX in BoardConfig.mk for the LineageOS source gate.
 
 # Camera
 odm/bin/hw/vendor.oplus.hardware.cammidasservice-V1-service
@@ -1233,9 +1249,9 @@ odm/firmware/fastchg/smart_chg_config_table.txt
 odm/etc/display/qdcm_calib_data_AA594_P_7_A0020_dsc_cmd_mode_panel.json
 
 # Display configurations
-my_product/vendor/etc/display_apollo_list_AA594_P_7_A0020_dsc_cmd_mode_panel.xml:vendor/etc/display_apollo_list_AA594_P_7_A0020_dsc_cmd_mode_panel.xml
-my_product/vendor/etc/display_dbvgain_config_v2_AA594_P_7_A0020_dsc_cmd_mode_panel.xml:vendor/etc/display_dbvgain_config_v2_AA594_P_7_A0020_dsc_cmd_mode_panel.xml
-my_product/vendor/etc/display_demura_config_v2_AA594_P_7_A0020_dsc_cmd_mode_panel.xml:vendor/etc/display_demura_config_v2_AA594_P_7_A0020_dsc_cmd_mode_panel.xml
+# my_product/ display panel calibration XMLs (apollo_list/dbvgain/demura) are
+# absent from this OOS dump — my_product partition was empty when extracted.
+# Display still works via PanelChaplin/.odf + ltm_config + spr_cfg in /vendor.
 odm/etc/PanelChaplin/AA594_P_7_A0020_dsc_cmd_mode_panel_1_100nit.odf
 odm/etc/PanelChaplin/AA594_P_7_A0020_dsc_cmd_mode_panel_1_2nit.odf
 odm/etc/PanelChaplin/AA594_P_7_A0020_dsc_cmd_mode_panel_1_max.odf
@@ -1275,7 +1291,7 @@ vendor/etc/spr_cfg_AA594_P_7_A0020_dsc_cmd_mode_panel.xml
 # odm/etc/vintf/manifest/manifest_oplus_esim.xml
 
 # eUICC
-my_product/etc/permissions/EuiccGoogle_grant_permissions_list.xml:product/etc/permissions/privapp-permissions-euiccgoogle.xml
+# my_product/etc/permissions/EuiccGoogle_grant_permissions_list.xml:product/etc/permissions/privapp-permissions-euiccgoogle.xml  # source absent in this dump (my_product empty)
 #my_product/priv-app/EuiccGoogle/EuiccGoogle.apk:product/priv-app/EuiccGoogle/EuiccGoogle.apk;PRESIGNED
 
 
