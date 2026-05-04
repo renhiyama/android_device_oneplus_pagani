@@ -1,0 +1,114 @@
+diff --git a/services/core/java/com/android/server/policy/PhoneWindowManager.java b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index d29ba2ae0..1a888373c 100644
+--- a/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -1829,6 +1829,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+     }
+ 
+     private void assistPress() {
++        // Pagani Plus Key: short press is intentionally a no-op. The user-facing
++        // contract is "press and hold only". Suppressing the default action here
++        // keeps Gemini (or whatever the assistant role holder is) from launching
++        // on accidental taps. The com.oplus.pluskey APK exposes the configurable
++        // long-press action via Settings; nothing else handles the key.
++        if (com.android.server.policy.PaganiPlusKey.isPagani()) {
++            cancelPreloadRecentApps();
++            return;
++        }
++
+         if (!keyguardOn() && mAssistPressAction != Action.NOTHING) {
+             if (mAssistPressAction != Action.APP_SWITCH) {
+                 cancelPreloadRecentApps();
+@@ -1844,6 +1854,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+     }
+ 
+     private void assistLongPress() {
++        // Pagani Plus Key: forward to the com.oplus.pluskey APK for action
++        // dispatch (sound mode cycle / DND / camera / flashlight / etc.). The
++        // app reads its configured action from Settings.System and runs it.
++        if (com.android.server.policy.PaganiPlusKey.isPagani()) {
++            cancelPreloadRecentApps();
++            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, "Plus Key - Long Press");
++            com.android.server.policy.PaganiPlusKey.fireLongPress(mContext);
++            return;
++        }
++
+         if (!keyguardOn() && mAssistLongPressAction != Action.NOTHING) {
+             if (mAssistLongPressAction != Action.APP_SWITCH) {
+                 cancelPreloadRecentApps();
+@@ -3125,7 +3145,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+ 
+         @Override
+         boolean supportLongPress() {
+-            return mAssistLongPressAction != Action.NOTHING;
++            // On pagani the Plus Key always wants long-press detection so the
++            // PlusKey APK can dispatch its configured action; ignore whatever
++            // the system assist setting is.
++            return com.android.server.policy.PaganiPlusKey.isPagani()
++                    || mAssistLongPressAction != Action.NOTHING;
+         }
+ 
+         @Override
+diff --git a/services/core/java/com/android/server/policy/PaganiPlusKey.java b/services/core/java/com/android/server/policy/PaganiPlusKey.java
+new file mode 100644
+index 000000000..1e2a8d6c2
+--- /dev/null
++++ b/services/core/java/com/android/server/policy/PaganiPlusKey.java
+@@ -0,0 +1,57 @@
++/*
++ * Copyright (C) 2026 The EvolutionX Project
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * Pagani Plus Key intercept helpers — used by PhoneWindowManager to redirect
++ * KEYCODE_ASSIST events to the com.oplus.pluskey APK on the OnePlus 13s
++ * "pagani" device. Short presses are dropped, long presses fire a broadcast
++ * that the APK turns into a configured action (sound mode, DND, camera, ...).
++ *
++ * This file is intentionally minimal so the PWM patch (patches/0010 in the
++ * pagani device tree) stays small and reviewable.
++ */
++package com.android.server.policy;
++
++import android.content.Context;
++import android.content.Intent;
++import android.os.SystemProperties;
++import android.os.UserHandle;
++import android.util.Log;
++
++public final class PaganiPlusKey {
++    private static final String TAG = "PaganiPlusKey";
++
++    /** Broadcast action the com.oplus.pluskey receiver listens for. */
++    public static final String ACTION_LONG_PRESS = "com.oplus.pluskey.LONG_PRESS";
++
++    /** Cached so we don't keep stat'ing the property. */
++    private static volatile Boolean sIsPagani;
++
++    private PaganiPlusKey() {}
++
++    /** True if running on the OnePlus 13s pagani device. */
++    public static boolean isPagani() {
++        Boolean cached = sIsPagani;
++        if (cached != null) return cached;
++        // ro.product.device is the OEM SKU (e.g. OP612BL1) on pagani builds,
++        // NOT the codename. Use the LineageOS / EvolutionX device-codename
++        // props which reliably equal "pagani".
++        boolean v = "pagani".equals(SystemProperties.get("ro.lineage.device"))
++                || "pagani".equals(SystemProperties.get("ro.evolution.device"));
++        sIsPagani = v;
++        return v;
++    }
++
++    /** Send the long-press broadcast to the PlusKey APK. */
++    public static void fireLongPress(Context ctx) {
++        try {
++            Intent i = new Intent(ACTION_LONG_PRESS);
++            i.setPackage("com.oplus.pluskey");
++            i.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES
++                    | Intent.FLAG_RECEIVER_FOREGROUND);
++            ctx.sendBroadcastAsUser(i, UserHandle.CURRENT);
++        } catch (Throwable t) {
++            Log.w(TAG, "fireLongPress failed", t);
++        }
++    }
++}

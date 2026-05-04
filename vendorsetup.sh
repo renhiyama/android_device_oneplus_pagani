@@ -21,6 +21,8 @@ PAGANI_PATCH_MAP=(
     "0006-lineage-sdk-bypass-charging-setting-and-controller.patch:lineage-sdk"
     "0007-lineageparts-bypass-charging-toggle.patch:packages/apps/LineageParts"
     "0008-settings-show-real-charging-power.patch:packages/apps/Settings"
+    "0009-settings-pluskey-category.patch:packages/apps/Settings"
+    "0010-pwm-pluskey-handler.patch:frameworks/base"
 )
 
 if [ ! -f "${PAGANI_PATCH_MARKER}" ] || [ "${PAGANI_PATCHES_DIR}" -nt "${PAGANI_PATCH_MARKER}" ]; then

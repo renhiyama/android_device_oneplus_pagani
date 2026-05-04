@@ -1,0 +1,85 @@
+diff --git a/res/values/strings.xml b/res/values/strings.xml
+index 4949f90..25ee49f 100644
+--- a/res/values/strings.xml
++++ b/res/values/strings.xml
+@@ -14949,4 +14949,11 @@
+     <string name="safety_center_device_finder_search_terms"></string>
+     <!-- Safety Center system component update search terms [CHAR LIMIT=NONE] -->
+     <string name="safety_center_system_component_update_search_terms"></string>
++
++    <!-- Plus Key & AI top-level category (added by EvoX device tree). -->
++    <string name="top_level_pluskey_title">Plus Key</string>
++    <string name="top_level_pluskey_summary">Customize the side button</string>
++    <string name="top_level_ai_title">AI</string>
++    <string name="top_level_ai_summary">On-device AI features (coming soon)</string>
+ </resources>
++
+diff --git a/res/xml/top_level_settings.xml b/res/xml/top_level_settings.xml
+index 7b29c61..6c51ddb 100644
+--- a/res/xml/top_level_settings.xml
++++ b/res/xml/top_level_settings.xml
+@@ -138,6 +138,30 @@
+             settings:controller="com.android.settings.display.TopLevelWallpaperPreferenceController"/>
+     </PreferenceCategory>
+ 
++
++    <PreferenceCategory
++        android:order="-115"
++        android:key="top_level_pluskey_category"
++        android:layout="@layout/settingslib_expressive_untitled_preference_category">
++        <com.android.settings.widget.HomepagePreference
++            android:icon="@drawable/ic_settings_pluskey"
++            android:key="top_level_pluskey"
++            android:order="-20"
++            android:title="@string/top_level_pluskey_title"
++            android:summary="@string/top_level_pluskey_summary">
++            <intent android:action="com.oplus.pluskey.SETTINGS"/>
++        </com.android.settings.widget.HomepagePreference>
++
++        <com.android.settings.widget.HomepagePreference
++            android:icon="@drawable/ic_settings_ai"
++            android:key="top_level_ai"
++            android:order="-10"
++            android:title="@string/top_level_ai_title"
++            android:summary="@string/top_level_ai_summary">
++            <intent android:action="com.oplus.pluskey.AI_SETTINGS"/>
++        </com.android.settings.widget.HomepagePreference>
++    </PreferenceCategory>
++
+     <PreferenceCategory
+         android:order="-110"
+         android:key="top_level_system_info_category"
+diff --git a/res/drawable/ic_settings_ai.xml b/res/drawable/ic_settings_ai.xml
+new file mode 100644
+index 0000000..b3d8547
+--- /dev/null
++++ b/res/drawable/ic_settings_ai.xml
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp" android:height="24dp"
++    android:viewportWidth="24" android:viewportHeight="24"
++    android:tint="?android:attr/colorAccent">
++    <path android:fillColor="@android:color/white"
++        android:pathData="M12,2L9.5,8.5 3,11l6.5,2.5L12,20l2.5,-6.5L21,11l-6.5,-2.5L12,2zM18,16l-1.25,2.75L14,20l2.75,1.25L18,24l1.25,-2.75L22,20l-2.75,-1.25L18,16zM6,16l-1.25,2.75L2,20l2.75,1.25L6,24l1.25,-2.75L10,20l-2.75,-1.25L6,16z"/>
++</vector>
+diff --git a/res/drawable/ic_settings_pluskey.xml b/res/drawable/ic_settings_pluskey.xml
+new file mode 100644
+index 0000000..027773e
+--- /dev/null
++++ b/res/drawable/ic_settings_pluskey.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp" android:height="24dp"
++    android:viewportWidth="24" android:viewportHeight="24"
++    android:tint="?android:attr/colorAccent">
++    <path
++        android:fillColor="@android:color/transparent"
++        android:strokeColor="@android:color/white"
++        android:strokeWidth="1.6"
++        android:pathData="M9,2 h6 a3,3 0 0 1 3,3 v14 a3,3 0 0 1 -3,3 h-6 a3,3 0 0 1 -3,-3 v-14 a3,3 0 0 1 3,-3 z"/>
++    <path
++        android:fillColor="@android:color/white"
++        android:pathData="M11.25,8 h1.5 v3.25 h3.25 v1.5 h-3.25 v3.25 h-1.5 v-3.25 h-3.25 v-1.5 h3.25 z"/>
++</vector>

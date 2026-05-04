@@ -41,9 +41,15 @@ PRODUCT_PACKAGES += \
     OPlusSettingsResTarget \
     OPlusSystemUIResTarget
 
-# Pluskey
+# Plus Key — programmable side-button replacement (Settings UI + receiver
+# APK). The button reports KEYCODE_ASSIST via gpio-keys.kl; PhoneWindowManager
+# patch 0010 intercepts the long-press and broadcasts to PlusKey, which
+# dispatches the user-configured action (sound profile, DND, camera, etc.).
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/keylayout/gpio-keys.kl:$(TARGET_COPY_OUT_VENDOR)/usr/keylayout/gpio-keys.kl
+
+PRODUCT_PACKAGES += \
+    PlusKey
 
 # Regional properties
 PRODUCT_COPY_FILES += \
