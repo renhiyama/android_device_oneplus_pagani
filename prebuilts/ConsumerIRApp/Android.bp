@@ -1,0 +1,24 @@
+// OPLUS ConsumerIRApp — IR remote-control app, talks to ConsumerIrManager
+// (Java services -> android.hardware.ir@V1 AIDL HAL). HAL is already
+// shipped by sm8750-common (android.hardware.ir-service.oplus). This
+// prebuilt is just the userspace UI + bundled device-codes DB.
+//
+// Source: stock OOS my_product/del-app/ConsumerIRApp/ConsumerIRApp.apk
+// (com.oplus.consumerIRApp v16.3.5, compileSdk=36 targetSdk=36).
+//
+// presigned: original OPLUS Android Team certificate; TRANSMIT_IR is a
+// normal-protection permission so signing scheme doesn't gate the IR
+// path. OEM-only signature perms (oplus.permission.OPLUS_COMPONENT_SAFE
+// etc.) silently no-op without breaking IR functionality.
+
+android_app_import {
+    name: "ConsumerIRApp",
+    owner: "oplus",
+    apk: "ConsumerIRApp.apk",
+    presigned: true,
+    preprocessed: true,
+    dex_preopt: {
+        enabled: false,
+    },
+    product_specific: true,
+}

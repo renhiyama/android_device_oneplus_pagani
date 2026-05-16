@@ -101,6 +101,14 @@ $(call soong_config_set_bool,OPLUS_LINEAGE_TOUCH_HAL,ENABLE_HTPR,false)
 # Vibrator
 $(call soong_config_set_bool,OPLUS_LINEAGE_VIBRATOR_HAL,USE_EFFECT_STREAM,true)
 
+# IR Remote — userspace app for the Kookong IR blaster. The
+# android.hardware.ir@V1 AIDL HAL (android.hardware.ir-service.oplus)
+# already ships from sm8750-common and registers IConsumerIr/default;
+# kernel side (oplus_sensor_kookong_ir_spi -> /dev/oplus_consumer_ir)
+# is wired in our DT. ConsumerIRApp is the only missing piece.
+PRODUCT_PACKAGES += \
+    ConsumerIRApp
+
 # Inherit from the common OEM chipset makefile.
 $(call inherit-product, device/oneplus/sm8750-common/common.mk)
 

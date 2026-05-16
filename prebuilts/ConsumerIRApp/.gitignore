@@ -1,0 +1,4 @@
+# ConsumerIRApp.apk is OPLUS proprietary, not redistributable. Stage it
+# locally from a stock OOS my_product/del-app/ConsumerIRApp/ dump with
+# stage.sh — see README.md.
+*.apk
