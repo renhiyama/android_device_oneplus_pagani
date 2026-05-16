@@ -1,0 +1,4 @@
+# OP15 SDK-36 camera donor libs are OPLUS proprietary, extracted from
+# a CPH2749 (OnePlus 15) stock build. Not redistributable from this repo.
+# Populate lib64/ locally with tools/op15-camera-libs/stage.sh — see README.
+lib64/*.so

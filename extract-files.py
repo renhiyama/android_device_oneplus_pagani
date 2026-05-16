@@ -29,6 +29,10 @@ blob_fixups: blob_fixups_user_type = {
         .regex_replace(r'(fdSupport += )TRUE;', r'\1FALSE;'),
     'odm/etc/init/init.camera_process.rc': blob_fixup()
         .regex_replace('    delete_recursion', '    #delete_recursion'),
+    # NOTE: libAlgoProcess.so V5→V7 fixup is now applied at donor-staging
+    # time (op15-camera-libs/lib64/ has the patchelf'd version). This blob_fixup
+    # only takes effect for the brief window between extract and the swap
+    # script overwriting; kept here as a defensive no-op for stock builds.
     'odm/lib64/libAlgoProcess.so': blob_fixup()
         .replace_needed('android.hardware.graphics.common-V5-ndk.so', 'android.hardware.graphics.common-V7-ndk.so'),
     (
@@ -86,3 +90,14 @@ if __name__ == '__main__':
         module, 'sm8750-common', module.vendor
     )
     utils.run()
+
+    # NOTE: 20 stock SDK-35 /odm/lib64 libs (libAlgoProcess, libAlgoInterface,
+    # libsharebuffer_impl, libcam.oplus.3a.v3, etc.) crash against our SDK-36
+    # /vendor — first as libHIS::UbwcRender in the HAL provider, then as
+    # libAlgoProcess::p010LSB2MSB in the camera app on photo encode. Re-apply
+    # the OP15 SDK-36 swap (see device/oneplus/pagani/op15-camera-libs/) to fix.
+    import os
+    import subprocess
+    swap = os.path.join(os.path.dirname(__file__), 'tools', 'apply_op15_camera_swap.sh')
+    if os.path.isfile(swap):
+        subprocess.run([swap], check=False)
