@@ -23,6 +23,7 @@ PAGANI_PATCH_MAP=(
     "0008-settings-show-real-charging-power.patch:packages/apps/Settings"
     "0009-settings-pluskey-category.patch:packages/apps/Settings"
     "0010-pwm-pluskey-handler.patch:frameworks/base"
+    "0011-surfaceflinger-synthetic-vrr-fallback.patch:frameworks/native"
     "0012-surfaceflinger-overlay-show-backend-fps.patch:frameworks/native"
     "0013-settings-display-ltpo-idle-toggle.patch:packages/apps/Settings"
 )

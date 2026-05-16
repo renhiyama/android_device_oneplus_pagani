@@ -1,0 +1,50 @@
+diff --git a/services/surfaceflinger/DisplayHardware/HWComposer.cpp b/services/surfaceflinger/DisplayHardware/HWComposer.cpp
+index dfb9d04..8adcd69 100644
+--- a/services/surfaceflinger/DisplayHardware/HWComposer.cpp
++++ b/services/surfaceflinger/DisplayHardware/HWComposer.cpp
+@@ -355,6 +355,16 @@ std::vector<HWComposer::HWCDisplayMode> HWComposer::getModesFromDisplayConfigura
+     RETURN_IF_HWC_ERROR_FOR("getDisplayConfigurations", error, *toPhysicalDisplayId(hwcDisplayId),
+                             {});
+ 
++    // Synthetic VRR fallback: vendor HALs (e.g. QTI's SDM composer on pagani)
++    // implement composer3 v3 but don't populate VrrConfig in getDisplayConfigurations,
++    // even though the panel hardware genuinely supports VRR via ADFR/QSync.
++    // When ro.vendor.display.synthetic_vrr_min_hz is set, we synthesize a
++    // VrrConfig per mode using that minimum, so the framework's RefreshRateSelector
++    // / FrameRateOverride machinery can request sub-panel-timing rates and the
++    // dev-options refresh-rate overlay reports actual variable rates.
++    const int32_t kSyntheticVrrMinHz =
++            base::GetIntProperty("ro.vendor.display.synthetic_vrr_min_hz"s, 0);
++
+     std::vector<HWCDisplayMode> modes;
+     modes.reserve(configs.size());
+     for (auto config : configs) {
+@@ -366,6 +376,17 @@ std::vector<HWComposer::HWCDisplayMode> HWComposer::getModesFromDisplayConfigura
+                                       .vrrConfig = config.vrrConfig,
+                                       .hdrOutputType = config.hdrOutputType};
+ 
++        if (!hwcMode.vrrConfig && kSyntheticVrrMinHz > 0 && hwcMode.vsyncPeriod > 0) {
++            hal::VrrConfig synthetic;
++            // minFrameIntervalNs is the panel's MAX rate (shortest interval), i.e.
++            // the timing's vsync period. The framework treats anything between
++            // [minFrameIntervalNs, kMinSupportedFrameRate] as the VRR range.
++            synthetic.minFrameIntervalNs = hwcMode.vsyncPeriod;
++            // Leave notifyExpectedPresentConfig as nullopt — the QTI HAL doesn't
++            // implement that callback and the framework treats it as optional.
++            hwcMode.vrrConfig = synthetic;
++        }
++
+         const DisplayConfiguration::Dpi estimatedDPI =
+                 getEstimatedDotsPerInchFromSize(hwcDisplayId, hwcMode);
+         if (config.dpi) {
+@@ -378,7 +399,9 @@ std::vector<HWComposer::HWCDisplayMode> HWComposer::getModesFromDisplayConfigura
+             hwcMode.dpiY = estimatedDPI.y;
+         }
+ 
+-        if (!mEnableVrrTimeout) {
++        // Guard the dereference: vrrConfig may still be nullopt if HAL didn't
++        // provide one and the synthetic-VRR sysprop is unset.
++        if (!mEnableVrrTimeout && hwcMode.vrrConfig) {
+             hwcMode.vrrConfig->notifyExpectedPresentConfig = {};
+         }
+ 
