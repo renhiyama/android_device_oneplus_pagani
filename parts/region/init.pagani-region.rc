@@ -1,0 +1,43 @@
+# Pagani region overlay + per-region identity for the unified pagani build.
+#
+# Project IDs (from ro.boot.prjname, set by the bootloader):
+#   24875  OnePlus 13s   (CPH2723, India)  OP612BL1
+#   24821  OnePlus 13T   (PKX110,  China)  OP60F5L1
+#
+# The overlay service runs once early-boot, before any HAL service that
+# reads /odm files. The identity property triggers fire whenever
+# ro.boot.prjname is set (always set by bootloader).
+
+# Region overlay is performed by init.pagani-region-binds.rc (auto-generated
+# alongside the CN /odm payload by tools/build_pagani_cn_vendor.sh). Each
+# diff-content file gets one mount-bind line under the prjname=24821
+# property trigger, executed by init in init context. No daemon or custom
+# sepolicy domain needed.
+
+# Per-region runtime markers. Note: ro.product.* are set in first-stage
+# init from build.prop and cannot be changed here, so the build identity
+# stays as the IN/CPH2723 default on both regions. That's cosmetic only;
+# OEM HALs and apps key off ro.boot.prjname and the marker below, not
+# ro.product.model.
+on property:ro.boot.prjname=24875
+    setprop persist.sys.oplus.region IN
+
+on property:ro.boot.prjname=24821
+    setprop persist.sys.oplus.region CN
+
+# HAL service gating. The OEM ships its own init.rc files alongside the
+# eSIM (IN) and eID (CN) HAL service binaries (extracted to
+# /odm/etc/init/esim@1.0-service.rc etc). Those .rc files declare the
+# HIDL interfaces correctly. We don't redeclare them here to avoid
+# host_init_verifier failures on unknown HIDL interfaces.
+#
+# Region gating: each OEM init.rc starts its service on `class hal`
+# trigger which fires for every region. To prevent the wrong-region
+# service from starting we stop it explicitly when prjname doesn't
+# match. The service binary is harmless if started — it just exits
+# because the region's hardware path isn't present.
+on property:ro.boot.prjname=24875
+    stop vendor.oplus.hardware.eid@1.0-service
+
+on property:ro.boot.prjname=24821
+    stop vendor.oplus.hardware.esim@1.0-service

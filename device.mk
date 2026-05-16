@@ -31,6 +31,16 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/parts/ltpo/init.pagani-ltpo.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/pagani-ltpo.rc \
     $(LOCAL_PATH)/parts/ltpo/pagani-ltpo.conf:$(TARGET_COPY_OUT_VENDOR)/etc/pagani-ltpo.conf
 
+# Region overlay — pagani is sold as 13s in IN (CPH2723, project 24875)
+# and as 13T in CN (PKX110, project 24821). Same hardware, different /odm
+# tuning + HALs. The overlay script runs early-boot, reads ro.boot.prjname,
+# and bind-mounts /odm/region/<prjname>/ files over their canonical /odm/
+# twins. Per-region identity props + eSIM/eID HAL gating live in the .rc.
+# CN-divergent /odm payload is pulled in via vendor/oneplus/pagani-cn.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/parts/region/init.pagani-region.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/pagani-region.rc \
+    $(LOCAL_PATH)/parts/region/init.pagani-region-binds.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/pagani-region-binds.rc
+
 # Fingerprint
 $(call soong_config_set,surfaceflinger,udfps_lib,//hardware/oplus:libudfps_extension.oplus)
 $(call soong_config_set_bool,qtidisplay,oplus_udfps,true)
@@ -96,6 +106,12 @@ $(call inherit-product, device/oneplus/sm8750-common/common.mk)
 
 # Inherit from the proprietary files makefile.
 $(call inherit-product, vendor/oneplus/pagani/pagani-vendor.mk)
+
+# CN-side region payload for unified pagani build (OnePlus 13T / project
+# 24821). Adds CN-only /odm files at canonical paths and CN-version of
+# diff-content files at /odm/region/24821/. Auto-applied at boot by
+# init.pagani-region.rc when ro.boot.prjname=24821.
+$(call inherit-product-if-exists, vendor/oneplus/pagani-cn/pagani-cn-vendor.mk)
 
 # OEM Camera (OplusCamera) — dodge-camera-port pipeline, with their apktool
 # typeface patch applied to our pagani extraction (removes OplusBase-
