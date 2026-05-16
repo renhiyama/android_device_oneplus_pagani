@@ -22,6 +22,15 @@ TARGET_SCREEN_WIDTH := 1216
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/display/displayconfig.xml:$(TARGET_COPY_OUT_VENDOR)/etc/displayconfig/display_id_4630946640660707475.xml
 
+# LTPO daemon — keeps ADFR sa_min_fps pinned at 1Hz floor so the panel
+# actually engages low-Hz hardware self-refresh on idle. Defeats the kernel's
+# oplus_adfr_status_reset() that wipes sa_min_fps on every panel timing
+# switch. Mirrors min_fps to vendor.display.backend_fps for the SF overlay.
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/parts/ltpo/pagani-ltpo-daemon.sh:$(TARGET_COPY_OUT_VENDOR)/bin/pagani-ltpo-daemon \
+    $(LOCAL_PATH)/parts/ltpo/init.pagani-ltpo.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/pagani-ltpo.rc \
+    $(LOCAL_PATH)/parts/ltpo/pagani-ltpo.conf:$(TARGET_COPY_OUT_VENDOR)/etc/pagani-ltpo.conf
+
 # Fingerprint
 $(call soong_config_set,surfaceflinger,udfps_lib,//hardware/oplus:libudfps_extension.oplus)
 $(call soong_config_set_bool,qtidisplay,oplus_udfps,true)

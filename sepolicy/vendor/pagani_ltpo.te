@@ -1,0 +1,32 @@
+# Pagani LTPO daemon — keeps ADFR sa_min_fps low so the panel actually
+# engages 1Hz LTPO self-refresh on idle. Runs in its own minimal domain.
+
+type pagani_ltpo, domain;
+type pagani_ltpo_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(pagani_ltpo)
+
+# Run a shell script (vendor /bin/sh) and use toolbox commands (cat, echo,
+# sleep, setprop, getprop, printf) inside it.
+allow pagani_ltpo vendor_shell_exec:file rx_file_perms;
+allow pagani_ltpo vendor_toolbox_exec:file rx_file_perms;
+allow pagani_ltpo toolbox_exec:file rx_file_perms;
+
+# Read /vendor/etc/pagani-ltpo.conf
+allow pagani_ltpo vendor_configs_file:dir search;
+allow pagani_ltpo vendor_configs_file:file r_file_perms;
+
+# Read/write the kernel's ADFR sysfs nodes:
+#   /sys/kernel/oplus_display/min_fps
+#   /sys/kernel/oplus_display/adfr_config
+# Vendor's kernel labels /sys/kernel/oplus_display/* as vendor_sysfs_graphics
+# (in vendor/qcom/opensource/display-commonsys/sepolicy/...). Allow the
+# search on the dir + read/write on the files we care about.
+allow pagani_ltpo vendor_sysfs_graphics:dir search;
+allow pagani_ltpo vendor_sysfs_graphics:file rw_file_perms;
+# Also need plain sysfs traversal to reach the directory in the first place
+allow pagani_ltpo sysfs:dir search;
+
+# Set the vendor.display.backend_fps property — read by SurfaceFlinger's
+# RefreshRateOverlay to show the actual panel idle rate (replacing "--").
+set_prop(pagani_ltpo, vendor_display_prop)

@@ -26,6 +26,9 @@ TARGET_ODM_PROP += $(DEVICE_PATH)/odm.prop
 TARGET_SYSTEM_EXT_PROP += $(DEVICE_PATH)/system_ext.prop
 TARGET_VENDOR_PROP += $(DEVICE_PATH)/vendor.prop
 
+# SELinux — pagani-specific (LTPO daemon, etc.)
+BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
+
 # Recovery
 TARGET_RECOVERY_UI_MARGIN_HEIGHT := 103
 

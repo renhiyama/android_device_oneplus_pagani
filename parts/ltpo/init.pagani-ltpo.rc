@@ -1,0 +1,26 @@
+# Pagani LTPO daemon. Keeps ADFR sa_min_fps pinned at the configured floor
+# so the panel can engage low-Hz self-refresh on idle. Defeats the kernel's
+# oplus_adfr_status_reset() which otherwise wipes sa_min_fps to the panel
+# timing rate on every timing switch.
+
+service pagani_ltpo /vendor/bin/pagani-ltpo-daemon
+    class late_start
+    user root
+    group root system
+    seclabel u:r:pagani_ltpo:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1
+    start pagani_ltpo
+
+# Idle MIPI mode toggle. Writing 1 to persist.sys.pagani_ltpo_idle ORs the
+# OPLUS_ADFR_CONFIG_IDLE_MODE bit (0x10) into adfr_config, allowing the
+# panel to fully drop the DSI link on truly static content. Default base
+# config is 0x3041; with bit 4 set it becomes 0x3051. Settings preference
+# under Display flips this property.
+on property:persist.sys.pagani_ltpo_idle=1
+    write /sys/kernel/oplus_display/adfr_config 0x3051
+
+on property:persist.sys.pagani_ltpo_idle=0
+    write /sys/kernel/oplus_display/adfr_config 0x3041

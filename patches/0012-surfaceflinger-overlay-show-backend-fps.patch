@@ -1,0 +1,44 @@
+diff --git a/services/surfaceflinger/RefreshRateOverlay.cpp b/services/surfaceflinger/RefreshRateOverlay.cpp
+index 9fd1faf..e88bacf 100644
+--- a/services/surfaceflinger/RefreshRateOverlay.cpp
++++ b/services/surfaceflinger/RefreshRateOverlay.cpp
+@@ -16,6 +16,7 @@
+ 
+ #include <algorithm>
+ 
++#include <android-base/properties.h>
+ #include <common/FlagManager.h>
+ #include "Client.h"
+ #include "Layer.h"
+@@ -23,6 +24,8 @@
+ 
+ #include <SkSurface.h>
+ 
++using namespace std::string_literals;
++
+ namespace android {
+ 
+ auto RefreshRateOverlay::draw(int refreshRate, int renderFps, bool idle, SkColor color,
+@@ -223,6 +226,22 @@ auto RefreshRateOverlay::getOrCreateBuffers(Fps refreshRate, Fps renderFps, bool
+ 
+     createTransaction().setTransform(mSurfaceControl->get(), transform).apply();
+ 
++    // OOS-style backend rate: when in VRR idle, show the panel's actual ADFR
++    // floor instead of dashing. The userspace LTPO daemon publishes the
++    // current min_fps via vendor.display.backend_fps. Mirrors OPlus's
++    // cacheAvtRefreshRate / applyAvtRefreshRate pattern. Only applies when
++    // SetByHwc isn't already taking ownership of the overlay text.
++    if (idle && !mFeatures.test(Features::SetByHwc)) {
++        const int backendFps =
++                base::GetIntProperty("vendor.display.backend_fps"s, 0);
++        if (backendFps > 0 && backendFps < refreshRate.getIntValue()) {
++            refreshRate = Fps::fromValue(static_cast<float>(backendFps));
++            // Clear idle so drawDash is skipped; the actual rate is drawn
++            // (and color is interpolated to red, indicating low rate).
++            idle = false;
++        }
++    }
++
+     BufferCache::const_iterator it = mBufferCache.find(
+             {refreshRate.getIntValue(), renderFps.getIntValue(), transformHint, idle});
+     if (it == mBufferCache.end()) {

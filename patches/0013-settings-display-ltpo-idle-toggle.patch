@@ -1,0 +1,98 @@
+diff --git a/res/values/evolution_strings.xml b/res/values/evolution_strings.xml
+index 50c53d4..280f6b1 100644
+--- a/res/values/evolution_strings.xml
++++ b/res/values/evolution_strings.xml
+@@ -420,4 +420,12 @@
+     <string name="night_display_activation_on_custom">Turn on until <xliff:g name="time" example="6 AM">%1$s</xliff:g></string>
+     <!-- Display settings screen, deactivation button action for custom schedule [CHAR LIMIT=40] -->
+     <string name="night_display_activation_off_custom">Turn off until <xliff:g name="time" example="10 PM">%1$s</xliff:g></string>
++
++    <!-- Battery: show real charging power on lock screen toggle [CHAR LIMIT=40] -->
++    <string name="show_real_charging_power_title">Show real charging power</string>
++    <string name="show_real_charging_power_summary">Show how much power your phone is actually drawing on the lock screen, instead of the charger\'s maximum capability.</string>
++
++    <!-- Display: pagani LTPO idle mode toggle [CHAR LIMIT=40] -->
++    <string name="pagani_ltpo_idle_title">Reduce idle display power</string>
++    <string name="pagani_ltpo_idle_summary">Allow the display to enter a deeper sleep state when the screen content is not changing. The first touch response after the screen has been idle may be slightly delayed.</string>
+ </resources>
+diff --git a/res/xml/display_settings.xml b/res/xml/display_settings.xml
+index bc0ef18..906d6b2 100644
+--- a/res/xml/display_settings.xml
++++ b/res/xml/display_settings.xml
+@@ -236,6 +236,12 @@
+             android:summary="@string/summary_placeholder"
+             settings:controller="com.android.settings.display.MinRefreshRatePreferenceController" />
+ 
++        <SwitchPreferenceCompat
++            android:key="pagani_ltpo_idle_mode"
++            android:title="@string/pagani_ltpo_idle_title"
++            android:summary="@string/pagani_ltpo_idle_summary"
++            settings:controller="com.android.settings.display.PaganiLtpoIdleController" />
++
+         <SwitchPreferenceCompat
+             android:key="peak_refresh_rate"
+             android:title="@string/peak_refresh_rate_title"
+diff --git a/src/com/android/settings/display/PaganiLtpoIdleController.java b/src/com/android/settings/display/PaganiLtpoIdleController.java
+new file mode 100644
+index 0000000..f89d95a
+--- /dev/null
++++ b/src/com/android/settings/display/PaganiLtpoIdleController.java
+@@ -0,0 +1,58 @@
++/*
++ * SPDX-FileCopyrightText: 2026 The LineageOS Project
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package com.android.settings.display;
++
++import android.content.Context;
++import android.os.SystemProperties;
++
++import com.android.settings.core.TogglePreferenceController;
++
++/**
++ * Controls the "Reduce idle display power" toggle on pagani.
++ *
++ * Sets persist.sys.pagani_ltpo_idle which is consumed by
++ * init.pagani-ltpo.rc — the init trigger writes the appropriate
++ * adfr_config bitmap to /sys/kernel/oplus_display/adfr_config so the panel
++ * can drop the MIPI link entirely on truly static content.
++ *
++ * Hidden on non-pagani devices via getAvailabilityStatus.
++ */
++public class PaganiLtpoIdleController extends TogglePreferenceController {
++
++    private static final String IDLE_PROP = "persist.sys.pagani_ltpo_idle";
++    private static final String DEVICE_PROP = "ro.product.device";
++
++    public PaganiLtpoIdleController(Context context, String key) {
++        super(context, key);
++    }
++
++    @Override
++    public int getAvailabilityStatus() {
++        final String device = SystemProperties.get(DEVICE_PROP, "");
++        // pagani ships under two SKUs: OP612BL1 (India / 13s) and
++        // OP60F5L1 (China / 13T). Same panel, same ADFR engine.
++        if ("OP612BL1".equals(device) || "OP60F5L1".equals(device)) {
++            return AVAILABLE;
++        }
++        return UNSUPPORTED_ON_DEVICE;
++    }
++
++    @Override
++    public boolean isChecked() {
++        return SystemProperties.getBoolean(IDLE_PROP, false);
++    }
++
++    @Override
++    public boolean setChecked(boolean isChecked) {
++        SystemProperties.set(IDLE_PROP, isChecked ? "1" : "0");
++        return true;
++    }
++
++    @Override
++    public int getSliceHighlightMenuRes() {
++        return com.android.settings.R.string.menu_key_display;
++    }
++}
