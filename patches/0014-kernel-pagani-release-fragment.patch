@@ -1,0 +1,12 @@
+diff --git a/arch/arm64/configs/vendor/oplus/pagani_release.config b/arch/arm64/configs/vendor/oplus/pagani_release.config
+new file mode 100644
+--- /dev/null
++++ b/arch/arm64/configs/vendor/oplus/pagani_release.config
+@@ -0,0 +1,7 @@
++# Pagani release-build perf strip. Layered on top of vendor/sun_perf.config +
++# vendor/oplus/sun_perf.config when KERNEL_BUILD_DEBUG != true. None of these
++# affect KMI or vendor module ABI. Module-level configs (VCPU_STALL_DETECTOR,
++# STM_SOURCE_FTRACE) deliberately not stripped — sm8750-common's
++# modules.load{,.system_dlkm,.recovery} lists their .ko files.
++# CONFIG_DEBUG_MEMORY_INIT is not set
++# CONFIG_QCOM_MINIDUMP_FTRACE is not set

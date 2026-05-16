@@ -21,6 +21,37 @@ TARGET_SCREEN_DENSITY := 480
 # Kernel
 TARGET_KERNEL_ADDITIONAL_FLAGS += CONFIG_PAGANI_DTB=y
 
+# Release-build perf strip (skipped when KERNEL_BUILD_DEBUG=true). Fragment is
+# added to the kernel tree by patches/0014-kernel-pagani-release-fragment.patch
+# at lunch time. Debug builds also swap perf->consolidate variant to get
+# CORESIGHT_SOURCE_ETM4X=m for simpleperf cs-etm:k branch capture (AutoFDO).
+ifeq ($(KERNEL_BUILD_DEBUG),true)
+# sun_consolidate.config is a fragment that layers on top of sun_perf.config —
+# it adds debug bits (ETM4X, CMA_DEBUG, DEBUG_PAGEALLOC), it does not replace
+# perf. Dropping perf would leak header stubs (e.g. battery_charger.h's
+# CONFIG_QTI_BATTERY_CHARGER fallbacks) into oplus_hal_adsp.c → redefinition.
+TARGET_KERNEL_CONFIG := \
+    gki_defconfig \
+    vendor/sun_perf.config \
+    vendor/sun_consolidate.config \
+    vendor/oplus/sun_perf.config
+else
+TARGET_KERNEL_CONFIG += vendor/oplus/pagani_release.config
+endif
+
+# AutoFDO. Profile is collected on-device with tools/autofdo_capture.sh and
+# placed at $(DEVICE_PATH)/profiles/pagani_kernel.afdo. If the file is absent
+# or KERNEL_BUILD_DEBUG=true, the kernel builds without sample-PGO. The flag
+# does not change KMI; vendor modules built without FDO load fine alongside
+# an FDO'd vmlinux. Single space-free KCFLAGS — make→shell re-tokenization
+# clobbers values with embedded whitespace.
+PAGANI_AFDO_PROFILE := $(abspath $(DEVICE_PATH)/profiles/pagani_kernel.afdo)
+ifneq ($(KERNEL_BUILD_DEBUG),true)
+ifneq ($(wildcard $(PAGANI_AFDO_PROFILE)),)
+TARGET_KERNEL_ADDITIONAL_FLAGS += KCFLAGS=-fprofile-sample-use=$(PAGANI_AFDO_PROFILE)
+endif
+endif
+
 # Properties
 TARGET_ODM_PROP += $(DEVICE_PATH)/odm.prop
 TARGET_SYSTEM_EXT_PROP += $(DEVICE_PATH)/system_ext.prop
