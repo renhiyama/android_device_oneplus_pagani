@@ -27,6 +27,7 @@ PAGANI_PATCH_MAP=(
     "0012-surfaceflinger-overlay-show-backend-fps.patch:frameworks/native"
     "0013-settings-display-ltpo-idle-toggle.patch:packages/apps/Settings"
     "0014-kernel-pagani-release-fragment.patch:kernel/oneplus/sm8750"
+    "0015-sepolicy_vndr-allow-opluscamera-app-vendor-xdsp.patch:device/qcom/sepolicy_vndr/sm8750"
 )
 
 if [ ! -f "${PAGANI_PATCH_MARKER}" ] || [ "${PAGANI_PATCHES_DIR}" -nt "${PAGANI_PATCH_MARKER}" ]; then
