@@ -1,18 +1,16 @@
 diff --git a/res/values/evolution_strings.xml b/res/values/evolution_strings.xml
-index 50c53d4..da159f5 100644
 --- a/res/values/evolution_strings.xml
 +++ b/res/values/evolution_strings.xml
-@@ -420,4 +420,8 @@
-     <string name="night_display_activation_on_custom">Turn on until <xliff:g name="time" example="6 AM">%1$s</xliff:g></string>
-     <!-- Display settings screen, deactivation button action for custom schedule [CHAR LIMIT=40] -->
-     <string name="night_display_activation_off_custom">Turn off until <xliff:g name="time" example="10 PM">%1$s</xliff:g></string>
+@@ -425,4 +425,8 @@
+     <!-- Per-app GPU composition -->
+     <string name="use_gpu_for_screen_composition_title">Use GPU for screen composition</string>
+     <string name="use_gpu_for_screen_composition_summary">Select apps that should disable HW overlays while in use</string>
 +
 +    <!-- Battery: show real charging power on lock screen toggle [CHAR LIMIT=40] -->
 +    <string name="show_real_charging_power_title">Show real charging power</string>
 +    <string name="show_real_charging_power_summary">Show how much power your phone is actually drawing on the lock screen, instead of the charger\'s maximum capability.</string>
  </resources>
 diff --git a/res/xml/power_usage_summary.xml b/res/xml/power_usage_summary.xml
-index 0979c93..25933dc 100644
 --- a/res/xml/power_usage_summary.xml
 +++ b/res/xml/power_usage_summary.xml
 @@ -73,6 +73,14 @@

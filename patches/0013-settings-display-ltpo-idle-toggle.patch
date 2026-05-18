@@ -1,25 +1,19 @@
 diff --git a/res/values/evolution_strings.xml b/res/values/evolution_strings.xml
-index 50c53d4..280f6b1 100644
 --- a/res/values/evolution_strings.xml
 +++ b/res/values/evolution_strings.xml
-@@ -420,4 +420,12 @@
-     <string name="night_display_activation_on_custom">Turn on until <xliff:g name="time" example="6 AM">%1$s</xliff:g></string>
-     <!-- Display settings screen, deactivation button action for custom schedule [CHAR LIMIT=40] -->
-     <string name="night_display_activation_off_custom">Turn off until <xliff:g name="time" example="10 PM">%1$s</xliff:g></string>
-+
-+    <!-- Battery: show real charging power on lock screen toggle [CHAR LIMIT=40] -->
-+    <string name="show_real_charging_power_title">Show real charging power</string>
-+    <string name="show_real_charging_power_summary">Show how much power your phone is actually drawing on the lock screen, instead of the charger\'s maximum capability.</string>
+@@ -429,4 +429,8 @@
+     <!-- Battery: show real charging power on lock screen toggle [CHAR LIMIT=40] -->
+     <string name="show_real_charging_power_title">Show real charging power</string>
+     <string name="show_real_charging_power_summary">Show how much power your phone is actually drawing on the lock screen, instead of the charger\'s maximum capability.</string>
 +
 +    <!-- Display: pagani LTPO idle mode toggle [CHAR LIMIT=40] -->
 +    <string name="pagani_ltpo_idle_title">Reduce idle display power</string>
 +    <string name="pagani_ltpo_idle_summary">Allow the display to enter a deeper sleep state when the screen content is not changing. The first touch response after the screen has been idle may be slightly delayed.</string>
  </resources>
 diff --git a/res/xml/display_settings.xml b/res/xml/display_settings.xml
-index bc0ef18..906d6b2 100644
 --- a/res/xml/display_settings.xml
 +++ b/res/xml/display_settings.xml
-@@ -236,6 +236,12 @@
+@@ -242,6 +242,12 @@
              android:summary="@string/summary_placeholder"
              settings:controller="com.android.settings.display.MinRefreshRatePreferenceController" />
  

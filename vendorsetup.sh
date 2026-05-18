@@ -45,12 +45,44 @@ if [ ! -f "${PAGANI_PATCH_MARKER}" ] || [ "${PAGANI_PATCHES_DIR}" -nt "${PAGANI_
                 echo "[pagani]   applied ${patch_file}" || \
                 { echo "[pagani]   FAILED  ${patch_file}"; pagani_failed=1; }
         else
-            # Either already applied (good), or context broken (bad) — distinguish
+            # Forward check failed — either fully reverse-applicable (already applied),
+            # or partial state because a later patch in the chain disturbed our trailing
+            # context. Probe both: clean reverse, then "+added lines already present".
             if (cd "${repo_path}" && git apply --reverse --check "${patch_path}" 2>/dev/null); then
                 echo "[pagani]   skip (already applied) ${patch_file}"
             else
-                echo "[pagani]   FAILED (context mismatch) ${patch_file}"
-                pagani_failed=1
+                # Heuristic: count +added non-empty payload lines from the patch and
+                # check how many are already present verbatim in their target files.
+                pagani_added_total=0
+                pagani_added_present=0
+                pagani_current_target=""
+                while IFS= read -r line; do
+                    case "$line" in
+                        "+++ b/"*)
+                            pagani_current_target="${repo_path}/${line#+++ b/}"
+                            ;;
+                        +++*|+) ;;
+                        +*)
+                            payload="${line:1}"
+                            # ignore pure-whitespace adds and patch metadata
+                            [ -z "${payload// /}" ] && continue
+                            pagani_added_total=$((pagani_added_total + 1))
+                            if [ -n "${pagani_current_target}" ] && [ -f "${pagani_current_target}" ] && \
+                               grep -qF -- "${payload}" "${pagani_current_target}" 2>/dev/null; then
+                                pagani_added_present=$((pagani_added_present + 1))
+                            fi
+                            ;;
+                    esac
+                done < "${patch_path}"
+
+                if [ "${pagani_added_total}" -gt 0 ] && \
+                   [ "${pagani_added_present}" -eq "${pagani_added_total}" ]; then
+                    echo "[pagani]   skip (applied, context drifted) ${patch_file}"
+                else
+                    echo "[pagani]   FAILED (context mismatch) ${patch_file} (${pagani_added_present}/${pagani_added_total} added lines present)"
+                    pagani_failed=1
+                fi
+                unset pagani_added_total pagani_added_present pagani_current_target payload line
             fi
         fi
     done
