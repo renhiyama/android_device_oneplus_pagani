@@ -861,7 +861,7 @@ odm/lib64/libwatermark_photo.so
 odm/lib64/libwrapper_te.so
 odm/lib64/libyuvwrapper.so
 odm/lib64/libzlib.so
-odm/lib64/vendor.oplus.hardware.camera.aon-V1-ndk_platform.so
+odm/lib64/vendor.oplus.hardware.camera.aon-V1-ndk_platform.so;MODULE_SUFFIX=_odm
 odm/lib64/vendor.oplus.hardware.camera.aon-service-impl.so
 odm/lib64/vendor.oplus.hardware.camera_rfi-V1-ndk.so;MODULE_SUFFIX=_odm
 odm/lib64/vendor.oplus.hardware.camera_rfi-V1-service-impl.so
