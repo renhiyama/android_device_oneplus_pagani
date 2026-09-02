@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<!--
+     ConsumerIRApp is an unmodified OPLUS prebuilt and links against the
+     OplusOSS framework extensions we stub out in hardware/oplus/oplus-fwk.
+     Because oplus-fwk is a boot jar, every one of its members is a non-SDK
+     interface, so the runtime blocks the app at link time:
+
+       hiddenapi: Accessing hidden method
+       Lcom/oplus/content/OplusFeatureConfigManager;->getInstance()
+       (api=blocked) from ConsumerIRApp.apk (domain=app) using linking: denied
+
+     which throws NoSuchMethodError in BaseActivity.onCreate and kills the
+     app on launch. Exempt it from hidden API enforcement, the same way
+     EuiccPolicy and BtHelper are exempted.
+-->
+<config>
+  <hidden-api-whitelisted-app package="com.oplus.consumerIRApp" />
+</config>
