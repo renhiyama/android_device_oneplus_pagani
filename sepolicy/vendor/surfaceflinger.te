@@ -1,0 +1,19 @@
+# SurfaceFlinger drives the OPlus UDFPS press notification from
+# hardware/oplus/fingerprint/UdfpsExtension.cpp, writing
+# /sys/kernel/oplus_display/notify_fppress on finger down/up.
+#
+# This is required because the SM8750 display driver only engages LHBM -- and
+# only then emits the "uiready" event the fingerprint HAL blocks on -- once
+# userspace notifies it of a press. LineageOS' generic FOD z-order path is
+# inert on this SoC (the composer guards it behind UDFPS_ZPOS, which this
+# device does not set, and the kernel has no z-order FOD detection), so without
+# this the HAL's waitUiready() always times out and enrollment fails with
+# FP_ERR_FINGERUP_TOO_FAST.
+#
+# Vendor's kernel labels /sys/kernel/oplus_display/* as vendor_sysfs_graphics
+# (see hardware/oplus/sepolicy/qti/vendor/genfs_contexts).
+allow surfaceflinger vendor_sysfs_graphics:dir search;
+allow surfaceflinger vendor_sysfs_graphics:file rw_file_perms;
+
+# Plain sysfs traversal to reach /sys/kernel/oplus_display in the first place.
+allow surfaceflinger sysfs:dir search;
