@@ -1,0 +1,11 @@
+# OplusCamera runs in its own app domain on stock OxygenOS.
+#
+# patches/0015-sepolicy_vndr-allow-opluscamera-app-vendor-xdsp.patch excludes
+# opluscamera_app from the vendor_xdsp_device neverallows in
+# device/qcom/sepolicy_vndr/sm8750/generic/vendor/common/domain.te so the OEM
+# camera can reach the xDSP. The type itself was never declared anywhere in the
+# tree, so checkpolicy aborted with "unknown type opluscamera_app".
+#
+# Declare it here so the vendor policy compiles. No allow rules are added: the
+# exclusions in domain.te are the only consumers.
+type opluscamera_app, domain;

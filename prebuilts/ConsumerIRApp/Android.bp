@@ -21,4 +21,15 @@ android_app_import {
         enabled: false,
     },
     product_specific: true,
+    required: [
+        "hidden-api-whitelist-com.oplus.consumerIRApp.xml",
+    ],
+}
+
+prebuilt_etc {
+    name: "hidden-api-whitelist-com.oplus.consumerIRApp.xml",
+    relative_install_path: "sysconfig",
+    filename: "hidden-api-whitelist-com.oplus.consumerIRApp.xml",
+    src: "hidden-api-whitelist-com.oplus.consumerIRApp.xml",
+    product_specific: true,
 }
